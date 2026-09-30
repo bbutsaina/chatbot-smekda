@@ -1,0 +1,125 @@
+<%- include('../partials/admin-header', { title: 'Help & Support', activePage: 'support', adminName: adminName }) %>
+
+<section class="space-y-6 font-[Arial,Helvetica,sans-serif]" id="page-help">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div class="lg:col-span-7 bg-white rounded-2xl border border-[#DEE2E6] shadow-sm p-6">
+      <h2 class="text-xl font-bold text-[#212529] mb-1">Help &amp; Support</h2>
+      <p class="text-xs text-[#6C757D] mb-6">Pertanyaan umum dan panduan</p>
+
+      <div class="space-y-3" id="quick-guide-accordion">
+        <div class="border border-[#DEE2E6] rounded-xl overflow-hidden">
+          <button class="w-full p-4 text-left flex justify-between items-center bg-[#F8F9FA] hover:bg-[#E9ECEF]/60 transition" onclick="toggleAccordion(1)" type="button">
+            <span class="text-xs font-bold text-[#212529]">Panduan 1: Cara menambah respons bot</span>
+            <svg class="w-4 h-4 text-[#6C757D] transform transition-transform" fill="none" id="acc-icon-1" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </button>
+          <div class="p-4 text-xs text-[#6C757D] bg-white border-t border-[#DEE2E6]" id="acc-body-1">
+            Buka tab Management FAQ, klik "+ Add New Data", isi Kode dan Response, lalu Save. Data langsung tersimpan ke tabel respon.
+          </div>
+        </div>
+
+        <div class="border border-[#DEE2E6] rounded-xl overflow-hidden">
+          <button class="w-full p-4 text-left flex justify-between items-center bg-[#F8F9FA] hover:bg-[#E9ECEF]/60 transition" onclick="toggleAccordion(2)" type="button">
+            <span class="text-xs font-bold text-[#212529]">Panduan 2: Meninjau pertanyaan yang belum terjawab</span>
+            <svg class="w-4 h-4 text-[#6C757D] transform transition-transform rotate-180" fill="none" id="acc-icon-2" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </button>
+          <div class="hidden p-4 text-xs text-[#6C757D] bg-white border-t border-[#DEE2E6]" id="acc-body-2">
+            Periksa penghitung "Unanswered Questions" di Dashboard, atau filter Log History untuk melihat percakapan yang belum dijawab bot.
+          </div>
+        </div>
+
+        <div class="border border-[#DEE2E6] rounded-xl overflow-hidden">
+          <button class="w-full p-4 text-left flex justify-between items-center bg-[#F8F9FA] hover:bg-[#E9ECEF]/60 transition" onclick="toggleAccordion(3)" type="button">
+            <span class="text-xs font-bold text-[#212529]">Panduan 3: Mengubah sapaan &amp; pesan fallback</span>
+            <svg class="w-4 h-4 text-[#6C757D] transform transition-transform rotate-180" fill="none" id="acc-icon-3" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </button>
+          <div class="hidden p-4 text-xs text-[#6C757D] bg-white border-t border-[#DEE2E6]" id="acc-body-3">
+            Buka Settings &rarr; Configuration Bot untuk mengubah Greeting Message dan Fallback Message. Klik Save untuk menyimpan ke tabel app_settings.
+          </div>
+        </div>
+
+        <div class="border border-[#DEE2E6] rounded-xl overflow-hidden">
+          <button class="w-full p-4 text-left flex justify-between items-center bg-[#F8F9FA] hover:bg-[#E9ECEF]/60 transition" onclick="toggleAccordion(4)" type="button">
+            <span class="text-xs font-bold text-[#212529]">Panduan 4: Membaca audit log percakapan</span>
+            <svg class="w-4 h-4 text-[#6C757D] transform transition-transform rotate-180" fill="none" id="acc-icon-4" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </button>
+          <div class="hidden p-4 text-xs text-[#6C757D] bg-white border-t border-[#DEE2E6]" id="acc-body-4">
+            Log percakapan diindeks berdasarkan Session ID di Log History dan bersumber dari tabel history_chat. Gunakan kolom Show Data untuk mengatur jumlah baris per halaman.
+          </div>
+        </div>
+
+        <div class="border border-[#DEE2E6] rounded-xl overflow-hidden">
+          <button class="w-full p-4 text-left flex justify-between items-center bg-[#F8F9FA] hover:bg-[#E9ECEF]/60 transition" onclick="toggleAccordion(5)" type="button">
+            <span class="text-xs font-bold text-[#212529]">Panduan 5: Keamanan akun administrator</span>
+            <svg class="w-4 h-4 text-[#6C757D] transform transition-transform rotate-180" fill="none" id="acc-icon-5" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </button>
+          <div class="hidden p-4 text-xs text-[#6C757D] bg-white border-t border-[#DEE2E6]" id="acc-body-5">
+            Setiap halaman admin dilindungi middleware requireAdmin. Pengunjung tanpa sesi admin aktif otomatis diarahkan kembali ke halaman Login.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lg:col-span-5 space-y-4">
+      <div class="bg-white rounded-2xl border border-[#DEE2E6] shadow-sm p-6 flex flex-col justify-between">
+        <div class="flex items-start gap-4 mb-4">
+          <div class="w-12 h-12 rounded-xl bg-[#F8F9FA] border border-[#DEE2E6] flex items-center justify-center text-[#212529]">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-[#212529]">Email Support</h3>
+            <p class="text-xs text-[#6C757D]">butsaina2134@gmail.com</p>
+          </div>
+        </div>
+        <a class="w-full py-2.5 bg-[#212529] hover:bg-[#343A40] text-white text-xs font-bold rounded-xl text-center transition" href="mailto:butsaina2134@gmail.com?subject=Permintaan%20Bantuan%20Admin%20IRIS-2">
+          Send Email
+        </a>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-[#DEE2E6] shadow-sm p-6 flex flex-col justify-between">
+        <div class="flex items-start gap-4 mb-4">
+          <div class="w-12 h-12 rounded-xl bg-[#F8F9FA] border border-[#DEE2E6] flex items-center justify-center text-[#212529]">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-[#212529]">Lupa Password?</h3>
+            <p class="text-xs text-[#6C757D]">Permintaan reset kata sandi</p>
+          </div>
+        </div>
+        <a class="w-full py-2.5 bg-[#212529] hover:bg-[#343A40] text-white text-xs font-bold rounded-xl text-center transition" href="mailto:butsaina2134@gmail.com?subject=Permintaan%20Reset%20Password%20Admin%20IRIS-2">
+          Kirim Permintaan
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/admin-footer') %>
+
+<script data-purpose="accordion">
+  function toggleAccordion(id) {
+    const body = document.getElementById('acc-body-' + id);
+    const icon = document.getElementById('acc-icon-' + id);
+    if (!body || !icon) return;
+    if (body.classList.contains('hidden')) {
+      body.classList.remove('hidden');
+      icon.classList.remove('rotate-180');
+    } else {
+      body.classList.add('hidden');
+      icon.classList.add('rotate-180');
+    }
+  }
+</script>

@@ -1,0 +1,23 @@
+{
+    "name": "chatbot-smekda",
+    "version": "1.0.0",
+    "private": true,
+    "description": "IRIS-2 chatbot admin portal - Node.js/Express backend",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "seed": "node seed.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "bcrypt": "^6.0.0",
+        "bcryptjs": "^3.0.3",
+        "dotenv": "^18.0.4",
+        "ejs": "^6.0.1",
+        "express": "^5.2.1",
+        "express-session": "^1.19.0",
+        "mysql2": "^3.24.5"
+    }
+}

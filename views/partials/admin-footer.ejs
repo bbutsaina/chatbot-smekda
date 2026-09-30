@@ -1,0 +1,93 @@
+    </main>
+  </div>
+
+  <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center hidden" id="modal-logout">
+    <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full mx-4 shadow-2xl border border-[#DEE2E6] text-center">
+      <div class="w-14 h-14 bg-[#F8F9FA] rounded-2xl border border-[#DEE2E6] text-[#212529] mx-auto flex items-center justify-center mb-4">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+        </svg>
+      </div>
+      <h3 class="text-xl font-bold text-[#212529]">Log out</h3>
+      <p class="text-xs text-[#6C757D] mt-1 mb-6">Are you sure you want to log out?</p>
+      <div class="flex items-center gap-3">
+        <button class="flex-1 py-2.5 border border-[#DEE2E6] text-[#212529] rounded-xl text-xs font-bold hover:bg-[#F8F9FA] transition" onclick="closeLogoutModal()" type="button">Cancel</button>
+        <button class="flex-1 py-2.5 bg-[#212529] text-white rounded-xl text-xs font-bold hover:bg-[#343A40] transition" type="submit" form="admin-logout-form">Log out</button>
+      </div>
+    </div>
+  </div>
+
+  <script data-purpose="modals-and-actions">
+    function openLogoutModal() {
+      const modal = document.getElementById('modal-logout');
+      if (modal) modal.classList.remove('hidden');
+    }
+    function closeLogoutModal() {
+      const modal = document.getElementById('modal-logout');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    const track = document.getElementById('swipe-track');
+    const knob = document.getElementById('swipe-knob');
+    const swipeBg = document.getElementById('swipe-bg');
+    let isDragging = false;
+    let startX = 0;
+    let currentX = 0;
+    let maxDistance = 0;
+
+    function recalculateTrack() {
+      if (track && knob) maxDistance = track.clientWidth - knob.clientWidth - 8;
+    }
+    window.addEventListener('resize', recalculateTrack);
+
+    function startDrag(x) {
+      recalculateTrack();
+      if (maxDistance <= 0) return;
+      isDragging = true;
+      startX = x - currentX;
+      if (knob) knob.style.transition = 'none';
+      if (swipeBg) swipeBg.style.transition = 'none';
+    }
+    function moveDrag(x) {
+      if (!isDragging || !knob || !swipeBg) return;
+      let next = x - startX;
+      if (next < 0) next = 0;
+      if (next > maxDistance) next = maxDistance;
+      currentX = next;
+      knob.style.transform = 'translateX(' + currentX + 'px)';
+      swipeBg.style.width = Math.max(((maxDistance - currentX) / maxDistance) * 100, 0) + '%';
+    }
+    function endDrag() {
+      if (!isDragging || !knob || !swipeBg) return;
+      isDragging = false;
+      knob.style.transition = 'transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+      swipeBg.style.transition = 'width 0.25s ease';
+      if (currentX >= maxDistance * 0.85) {
+        document.getElementById('admin-logout-form').submit();
+      }
+      currentX = 0;
+      knob.style.transform = 'translateX(0px)';
+      swipeBg.style.width = '100%';
+    }
+
+    if (knob) {
+      knob.addEventListener('mousedown', (e) => startDrag(e.clientX));
+      window.addEventListener('mousemove', (e) => moveDrag(e.clientX));
+      window.addEventListener('mouseup', endDrag);
+      knob.addEventListener('touchstart', (e) => startDrag(e.touches[0].clientX));
+      window.addEventListener('touchmove', (e) => moveDrag(e.touches[0].clientX));
+      window.addEventListener('touchend', endDrag);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const dateEl = document.getElementById('current-date-label');
+      if (dateEl) {
+        dateEl.textContent = new Date().toLocaleDateString('id-ID', {
+          weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+        });
+      }
+      recalculateTrack();
+    });
+  </script>
+</body>
+</html>

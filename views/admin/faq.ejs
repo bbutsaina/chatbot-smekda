@@ -1,0 +1,250 @@
+<%- include('../partials/admin-header', { title: 'Management FAQ', activePage: 'faq', adminName: adminName, search: search }) %>
+
+<section class="space-y-6" id="page-faq">
+  <div class="bg-white rounded-2xl border border-[#DEE2E6] shadow-sm p-6">
+    <% if (flash) { %>
+      <div class="mb-4 px-4 py-3 rounded-[12px] text-sm <%= flash.type === 'success' ? 'bg-[#D4EDDA] text-[#155724] border border-[#155724]/20' : 'bg-red-100 border border-red-400 text-red-700' %>">
+        <%= flash.message %>
+      </div>
+    <% } %>
+    <% if (formError) { %>
+      <div class="mb-4 px-4 py-3 rounded-[12px] text-sm bg-red-100 border border-red-400 text-red-700"><%= formError %></div>
+    <% } %>
+
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#DEE2E6]">
+      <div>
+        <h2 class="text-xl font-bold text-[#212529]">Management FAQ</h2>
+        <p class="text-xs text-[#6C757D]">Create, curate, and maintain bot auto-responses</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2.5">
+        <!-- Add New Data Button -->
+        <button class="px-4 py-2 bg-[#212529] hover:bg-[#343A40] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition shadow-sm active:scale-95" onclick="openAddFaqModal()" type="button">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+          + Add New Data
+        </button>
+
+        <!-- Live keyword search -->
+        <form action="/admin/faq" method="GET" class="relative">
+          <% if (perPage !== 9) { %><input type="hidden" name="per_page" value="<%= perPage %>" /><% } %>
+          <% if (category) { %><input type="hidden" name="category" value="<%= category %>" /><% } %>
+          <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#ADB5BD]">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </span>
+          <input class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-[#DEE2E6] rounded-xl text-[#212529] font-semibold focus:ring-1 focus:ring-[#212529] focus:outline-none transition" name="q" value="<%= search %>" placeholder="Cari FAQ..." type="search"/>
+        </form>
+
+        <!-- Category filter -->
+        <form action="/admin/faq" method="GET" class="relative">
+          <% if (perPage !== 9) { %><input type="hidden" name="per_page" value="<%= perPage %>" /><% } %>
+          <% if (search) { %><input type="hidden" name="q" value="<%= search %>" /><% } %>
+          <label class="sr-only" for="faq-category-select">Category</label>
+          <select class="px-3.5 py-2 bg-white border border-[#DEE2E6] rounded-xl text-xs font-semibold text-[#212529] hover:bg-[#F8F9FA] focus:ring-0 focus:outline-none cursor-pointer" id="faq-category-select" name="category" onchange="this.form.submit()">
+            <option value="">Category: All</option>
+            <% categories.forEach(function (cat) { %>
+              <option value="<%= cat %>" <%= category === cat ? 'selected' : '' %>><%= cat %></option>
+            <% }); %>
+          </select>
+        </form>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto mt-4">
+      <table class="w-full text-left text-sm text-[#212529]" id="faq-main-table">
+<thead class="bg-[#F8F9FA] border-b border-[#DEE2E6] text-xs font-bold text-[#6C757D]">
+          <tr>
+            <th class="py-3 px-4 text-center">Menu</th>
+            <th class="py-3 px-4 text-center">Label</th>
+            <th class="py-3 px-4 text-center">Keywords</th>
+            <th class="py-3 px-4 text-center">Response</th>
+            <th class="py-3 px-4 text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DEE2E6]/60 text-xs" id="faq-table-body">
+          <% if (faqs.length === 0) { %>
+            <tr>
+              <td class="py-16 px-6 text-center" colspan="5">
+                <div class="flex flex-col items-center justify-center text-center">
+                  <div class="w-14 h-14 rounded-2xl bg-[#F8F9FA] border border-[#DEE2E6] flex items-center justify-center text-[#6C757D] mb-3.5 shadow-sm">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                  </div>
+                  <h3 class="text-base font-bold text-[#212529]">No matching data records found.</h3>
+                  <p class="text-xs text-[#6C757D] mt-1 max-w-sm">No FAQ entries match your current search query or filter selection. Try using different keywords.</p>
+                </div>
+              </td>
+            </tr>
+          <% } %>
+          <% faqs.forEach(function (row) { %>
+            <tr class="hover:bg-[#F8F9FA]/70 transition">
+              <td class="py-3 px-4 text-center align-middle whitespace-nowrap">
+                <span class="inline-block px-2 py-0.5 rounded-md bg-[#F8F9FA] border border-[#DEE2E6] text-[#212529] font-semibold"><%= row.menu %></span>
+              </td>
+              <td class="py-3 px-4 text-center align-middle font-semibold text-[#212529] whitespace-nowrap"><%= row.label %></td>
+              <td class="py-3 px-4 text-center align-middle text-[#6C757D] max-w-[16rem] truncate" title="<%= row.keywords %>"><%= row.keywords %></td>
+              <td class="py-3 px-4 text-center align-middle text-[#6C757D] max-w-md truncate" title="<%= row.responseText %>"><%= row.responseText %></td>
+              <td class="py-3 px-4 text-center align-middle">
+                <div class="flex items-center justify-center gap-2">
+                  <button onclick="openEditFaqModal(<%= row.id %>, '<%= row.jsMenu %>', '<%= row.jsLabel %>', '<%= row.jsKeywords %>', '<%= row.jsResponse %>')" class="p-1.5 hover:text-[#212529] text-[#6C757D] hover:bg-[#F8F9FA] rounded-lg transition" title="Edit row" type="button">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                    </svg>
+                  </button>
+                  <form action="/admin/faq/<%= row.id %>/delete" method="POST" class="inline" onsubmit="return confirmDeleteFaq(event, '<%= row.jsLabel %>')">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <button class="text-red-600 hover:text-red-900 transition-colors p-2 rounded-lg hover:bg-red-50" title="Delete FAQ" type="submit">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 6h18"></path>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                        <line x1="10" x2="10" y1="11" y2="17"></line>
+                        <line x1="14" x2="14" y1="11" y2="17"></line>
+                      </svg>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if (total > 0) { %>
+      <%- include('partial/faq-pagination', { total: total, perPage: perPage, currentPage: currentPage, totalPages: totalPages, search: search, category: category }) %>
+    <% } %>
+  </div>
+</section>
+
+<!-- BEGIN: Add FAQ Data Modal -->
+<div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300 opacity-0 pointer-events-none" id="modal-add-faq">
+  <div class="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full mx-auto shadow-2xl border border-[#DEE2E6] transform transition-all duration-300 scale-95" id="modal-add-faq-panel">
+    <div class="flex items-center justify-between pb-4 mb-4 border-b border-[#DEE2E6]">
+      <div>
+        <h3 class="text-lg font-bold text-[#212529] tracking-tight" id="faq-modal-title">Add FAQ Record</h3>
+        <p class="text-xs text-[#6C757D]">Set bot responses, triggers, and menu placement</p>
+      </div>
+      <button class="w-8 h-8 rounded-xl text-[#6C757D] hover:text-[#212529] hover:bg-[#F8F9FA] flex items-center justify-center transition" onclick="closeAddFaqModal()" title="Close" type="button">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+        </svg>
+      </button>
+    </div>
+
+    <form class="space-y-4" id="faq-add-form" action="/admin/faq/store" method="POST">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+      <div>
+        <label class="block text-xs font-bold text-[#212529] mb-1.5" for="faq-new-menu">
+          Menu <span class="text-rose-500">*</span>
+        </label>
+        <input class="w-full px-3 py-2 text-xs bg-white border border-[#DEE2E6] rounded-xl focus:ring-1 focus:ring-[#212529] focus:outline-none transition" id="faq-new-menu" name="menu" maxlength="150" placeholder="e.g. PPDB" required type="text" value="<%= (formValues && formValues.menu) ? formValues.menu : '' %>" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-[#212529] mb-1.5" for="faq-new-label">
+          Label <span class="text-rose-500">*</span>
+        </label>
+        <input class="w-full px-3 py-2 text-xs bg-white border border-[#DEE2E6] rounded-xl focus:ring-1 focus:ring-[#212529] focus:outline-none transition" id="faq-new-label" name="label" maxlength="150" placeholder="e.g. Jadwal Pendaftaran" required type="text" value="<%= (formValues && formValues.label) ? formValues.label : '' %>" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-[#212529] mb-1.5" for="faq-new-keywords">
+          Keywords <span class="text-rose-500">*</span>
+        </label>
+        <input class="w-full px-3 py-2 text-xs bg-white border border-[#DEE2E6] rounded-xl focus:ring-1 focus:ring-[#212529] focus:outline-none transition" id="faq-new-keywords" name="keywords" maxlength="255" placeholder="e.g. daftar, pendaftaran, ppdb" required type="text" value="<%= (formValues && formValues.keywords) ? formValues.keywords : '' %>" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-[#212529] mb-1.5" for="faq-new-response">
+          Response <span class="text-rose-500">*</span>
+        </label>
+        <textarea class="w-full px-3 py-2 text-xs bg-white border border-[#DEE2E6] rounded-xl focus:ring-1 focus:ring-[#212529] focus:outline-none transition" id="faq-new-response" name="response" placeholder="Informasi pendaftaran siswa baru..." required rows="3"><%= (formValues && formValues.responseText) ? formValues.responseText : '' %></textarea>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-[#DEE2E6]">
+        <button class="px-4 py-2 text-xs font-semibold text-[#6C757D] hover:text-[#212529] hover:bg-[#F8F9FA] rounded-xl border border-[#DEE2E6] transition" onclick="closeAddFaqModal()" type="button">Cancel</button>
+        <button class="px-5 py-2 text-xs font-bold text-white bg-[#212529] hover:bg-[#343A40] rounded-xl shadow-sm transition active:scale-95 flex items-center gap-1.5" type="submit">
+          <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+          Save Data
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+<!-- END: Add FAQ Data Modal -->
+
+<%- include('../partials/admin-footer') %>
+
+<script data-purpose="faq-modal">
+  var faqModal = document.getElementById('modal-add-faq');
+  var faqPanel = document.getElementById('modal-add-faq-panel');
+  var faqForm = document.getElementById('faq-add-form');
+  var faqTitle = document.getElementById('faq-modal-title');
+  var faqMenu = document.getElementById('faq-new-menu');
+  var faqLabel = document.getElementById('faq-new-label');
+  var faqKeywords = document.getElementById('faq-new-keywords');
+  var faqResponse = document.getElementById('faq-new-response');
+
+  function openAddFaqModal() {
+    faqForm.action = '/admin/faq/store';
+    faqTitle.textContent = 'Add FAQ Record';
+    faqMenu.value = '';
+    faqLabel.value = '';
+    faqKeywords.value = '';
+    faqResponse.value = '';
+    revealFaqModal();
+  }
+
+  function openEditFaqModal(id, menu, label, keywords, responseText) {
+    faqForm.action = '/admin/faq/' + id;
+    faqTitle.textContent = 'Edit FAQ Record';
+    faqMenu.value = menu;
+    faqLabel.value = label;
+    faqKeywords.value = keywords;
+    faqResponse.value = responseText;
+    revealFaqModal();
+  }
+
+  function revealFaqModal() {
+    faqModal.classList.remove('pointer-events-none');
+    faqModal.classList.remove('opacity-0');
+    faqModal.classList.add('opacity-100');
+    faqPanel.classList.remove('scale-95');
+    faqPanel.classList.add('scale-100');
+    setTimeout(function () { faqMenu.focus(); }, 100);
+  }
+
+  function closeAddFaqModal() {
+    faqModal.classList.remove('opacity-100');
+    faqModal.classList.add('opacity-0');
+    faqPanel.classList.remove('scale-100');
+    faqPanel.classList.add('scale-95');
+    setTimeout(function () { faqModal.classList.add('pointer-events-none'); }, 250);
+  }
+
+  function confirmDeleteFaq(event, label) {
+    if (!window.confirm('Hapus FAQ "' + label + '"? Tindakan ini tidak dapat dibatalkan.')) {
+      event.preventDefault();
+      return false;
+    }
+    return true;
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    faqModal.addEventListener('click', function (e) {
+      if (e.target === faqModal) closeAddFaqModal();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeAddFaqModal();
+    });
+    <% if (formError) { %>openAddFaqModal();<% } %>
+  });
+</script>

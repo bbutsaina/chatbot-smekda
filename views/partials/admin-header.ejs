@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title><%= title %> &mdash; Chatbot Admin Portal</title>
+
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              dark: '#212529',
+              gray: '#343A40',
+              muted: '#6C757D',
+              border: '#DEE2E6',
+              light: '#F8F9FA',
+              card: '#FFFFFF',
+              emeraldBg: '#D4EDDA',
+              emeraldText: '#155724',
+              redBg: '#F8D7DA',
+              redText: '#721C24'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style data-purpose="custom-scrollbars">
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #c5cbd1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a0a6ad; }
+  </style>
+  <style data-purpose="sidebar-interactions">
+    #sidebar-container { width: 80px; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    #sidebar-container:hover { width: 280px; }
+    .sidebar-label {
+      opacity: 0;
+      transform: translateX(-10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #sidebar-container:hover .sidebar-label {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+    /* Brand lockup must never force the sidebar wider than its collapsed
+       state, and the logo must scale rather than get cropped. */
+    #sidebar-brand { min-width: 0; }
+    /* Logo keeps a square 40px box at every sidebar width so it scales
+       instead of being cropped by the collapsing sidebar. */
+    #sidebar-brand-logo {
+      flex-shrink: 0;
+      max-width: 40px;
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                  height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.3s ease;
+    }
+    #swipe-logout-wrapper { opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
+    #sidebar-container:hover #swipe-logout-wrapper { opacity: 1; pointer-events: auto; }
+    #mini-logout-icon { display: flex; transition: opacity 0.2s ease; }
+    #sidebar-container:hover #mini-logout-icon { display: none; }
+  </style>
+</head>
+<body class="bg-[#E9ECEF] text-[#212529] font-sans antialiased min-h-screen flex overflow-x-hidden">
+
+  <div class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none" id="toast-container"></div>
+
+  <aside class="h-screen bg-white border-r border-[#DEE2E6] flex flex-col justify-between py-5 px-3.5 z-30 fixed left-0 top-0 shadow-sm overflow-hidden" id="sidebar-container">
+    <div class="flex flex-col w-full">
+      <a href="/admin/dashboard" id="sidebar-brand" class="flex items-center gap-3.5 px-2 mb-8 h-12 min-w-0">
+        <div class="w-12 h-12 rounded-2xl bg-[#212529] flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden p-1.5 min-w-0">
+          <img src="/images/smekda.png" alt="Logo SMEKDA" id="sidebar-brand-logo" class="w-10 h-10 min-w-[40px] md:w-10 md:h-10 object-contain transition-all duration-200 block mx-auto md:mx-0" />
+        </div>
+        <span class="sidebar-label font-bold text-2xl tracking-tight text-[#212529] min-w-0 truncate">Chatbot</span>
+      </a>
+
+      <nav aria-label="Primary Navigation" class="flex flex-col gap-2.5 w-full">
+        <% const navActive = 'text-white bg-[#212529] hover:bg-[#343A40] shadow-sm'; %>
+        <% const navIdle = 'text-[#6C757D] hover:text-[#212529] hover:bg-[#F8F9FA]'; %>
+
+        <a href="/admin/dashboard" class="nav-item group flex items-center gap-3.5 w-full p-3 rounded-xl transition duration-150 <%= activePage === 'dashboard' ? navActive : navIdle %>" title="Dashboard">
+          <div class="w-7 h-7 flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V16z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </div>
+          <span class="sidebar-label text-base font-semibold">Dashboard</span>
+        </a>
+
+        <a href="/admin/faq" class="nav-item group flex items-center gap-3.5 w-full p-3 rounded-xl transition duration-150 <%= activePage === 'faq' ? navActive : navIdle %>" title="Management FAQ">
+          <div class="w-7 h-7 flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </div>
+          <span class="sidebar-label text-base font-semibold">Management FAQ</span>
+        </a>
+
+        <a href="/admin/history" class="nav-item group flex items-center gap-3.5 w-full p-3 rounded-xl transition duration-150 <%= activePage === 'history' ? navActive : navIdle %>" title="Log History">
+          <div class="w-7 h-7 flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </div>
+          <span class="sidebar-label text-base font-semibold">Log History</span>
+        </a>
+
+        <div class="h-px bg-[#DEE2E6] my-3"></div>
+
+        <a href="/admin/settings" class="nav-item group flex items-center gap-3.5 w-full p-3 rounded-xl transition duration-150 <%= activePage === 'settings' ? navActive : navIdle %>" title="Settings">
+          <div class="w-7 h-7 flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </div>
+          <span class="sidebar-label text-base font-semibold">Settings</span>
+        </a>
+
+        <a href="/admin/support" class="nav-item group flex items-center gap-3.5 w-full p-3 rounded-xl transition duration-150 <%= activePage === 'support' ? navActive : navIdle %>" title="Help &amp; Support">
+          <div class="w-7 h-7 flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </div>
+          <span class="sidebar-label text-base font-semibold">Help &amp; Support</span>
+        </a>
+      </nav>
+    </div>
+
+    <div class="w-full pb-2">
+      <form action="/admin/logout" method="POST" id="admin-logout-form" class="w-full">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button class="w-12 h-12 mx-auto rounded-xl flex items-center justify-center text-[#6C757D] hover:text-[#212529] hover:bg-[#F8F9FA] transition" id="mini-logout-icon" title="Log Out" type="submit">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+        </button>
+      </form>
+
+      <div class="w-full" id="swipe-logout-wrapper">
+        <div class="relative w-full h-12 bg-white border border-[#DEE2E6] rounded-full overflow-hidden p-1 flex items-center select-none cursor-pointer" id="swipe-track">
+          <div class="absolute inset-y-0 left-0 bg-[#212529] rounded-full flex items-center justify-end pr-4 text-white text-xs font-bold uppercase tracking-wider w-full pointer-events-none transition-all duration-75" id="swipe-bg">
+            <span class="mr-6 text-xs font-semibold">Swipe to Log out</span>
+          </div>
+          <div class="absolute left-1 top-1 bottom-1 w-10 h-10 rounded-full bg-white text-[#212529] shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing z-10 transition-transform" id="swipe-knob">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col min-h-screen ml-[80px] p-6 lg:p-8 transition-all duration-300">
+    <header class="w-full bg-white rounded-2xl border border-[#DEE2E6] shadow-sm p-4 mb-6 flex items-center justify-between gap-4">
+      <div class="relative flex-1 max-w-md">
+        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#ADB5BD]">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+        </span>
+        <form action="<%= activePage === 'faq' ? '/admin/faq' : '/admin/history' %>" method="GET" class="w-full">
+          <input class="w-full pl-10 pr-4 py-2.5 text-base bg-[#F8F9FA] border border-[#DEE2E6] rounded-xl focus:ring-1 focus:ring-[#212529] focus:outline-none transition" name="q" value="<%= typeof search !== 'undefined' && search ? search : '' %>" placeholder="Search Keyword..." type="search"/>
+        </form>
+      </div>
+
+      <div class="flex items-center gap-3.5">
+        <div class="hidden sm:flex items-center px-4 py-2.5 rounded-xl border border-[#DEE2E6] bg-[#F8F9FA] text-sm font-semibold text-[#212529]">
+          <span id="current-date-label"></span>
+        </div>
+
+        <div class="flex items-center gap-3 p-1.5 pl-2 pr-3 rounded-xl border border-[#DEE2E6]">
+          <div class="relative w-10 h-10 rounded-full bg-[#212529] text-white flex items-center justify-center font-bold text-base shadow-sm">
+            <span><%= (adminName || 'A').charAt(0).toUpperCase() %></span>
+            <span class="absolute top-0 right-0 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white"></span>
+          </div>
+          <div class="text-left hidden md:block">
+            <div class="text-sm font-bold text-[#212529] leading-tight">
+              Hello, <span id="header-admin-name"><%= adminName %></span>!
+            </div>
+            <div class="text-xs text-[#6C757D] font-medium leading-none mt-1" id="header-admin-role">Administrator</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 w-full">

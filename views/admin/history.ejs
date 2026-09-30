@@ -1,0 +1,117 @@
+<%- include('../partials/admin-header', { title: 'Log History', activePage: 'history', adminName: adminName, search: search }) %>
+
+<section class="space-y-6" id="page-history">
+  <div class="bg-white rounded-2xl border border-[#DEE2E6] shadow-sm p-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#DEE2E6]">
+      <div>
+        <h2 class="text-xl font-bold text-[#212529]">Log History</h2>
+        <p class="text-xs text-[#6C757D]">Complete audit trail of user and bot dialogue interactions</p>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto mt-4">
+      <table class="w-full text-left text-sm text-[#212529]" id="history-main-table">
+        <thead class="bg-[#F8F9FA] border-b border-[#DEE2E6] text-xs font-bold text-[#6C757D]">
+          <tr>
+            <th class="py-3 px-4 w-12 text-center">No</th>
+            <th class="py-3 px-4">Session ID</th>
+            <th class="py-3 px-4">User Message</th>
+            <th class="py-3 px-4">Bot Response</th>
+            <th class="py-3 px-4 text-right">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[#DEE2E6]/60 text-xs" id="history-table-body">
+          <% if (logs.length === 0) { %>
+            <tr>
+              <td class="py-16 px-6 text-center" colspan="5">
+                <div class="flex flex-col items-center justify-center text-center">
+                  <div class="w-14 h-14 rounded-2xl bg-[#F8F9FA] border border-[#DEE2E6] flex items-center justify-center text-[#6C757D] mb-3.5 shadow-sm">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                  </div>
+                  <h3 class="text-base font-bold text-[#212529]">No matching data records found.</h3>
+                  <p class="text-xs text-[#6C757D] mt-1 max-w-sm">No dialogue logs match your current search query. Try searching with a different keyword or session ID.</p>
+                </div>
+              </td>
+            </tr>
+          <% } %>
+          <% logs.forEach(function (row, idx) {
+               // Prefer the stored status flag. Falling back to reply
+               // emptiness mislabels fallback answers, which do carry text.
+               const unanswered = row.status === 'Unanswered'
+                 || (!row.status && (row.pesan_keluar === null || row.pesan_keluar === '')); %>
+            <tr class="hover:bg-[#F8F9FA]/70 transition">
+              <td class="py-3.5 px-4 text-center font-medium text-[#6C757D]"><%= (currentPage - 1) * perPage + idx + 1 %></td>
+              <td class="py-3.5 px-4 font-mono text-[11px] text-[#343A40]"><%= row.token || '-' %></td>
+              <td class="py-3.5 px-4 text-[#212529]"><%= row.pesan_masuk || '-' %></td>
+              <td class="py-3.5 px-4 text-[#6C757D]"><%= row.pesan_keluar || '-' %></td>
+              <td class="py-3.5 px-4 text-right">
+                <% if (unanswered) { %>
+                  <span class="px-2.5 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                      Unanswered
+                  </span>
+                <% } else { %>
+                  <span class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-[#D4EDDA] text-[#155724]">Answered</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if (total > 0) { %>
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-5 mt-4 border-t border-[#DEE2E6] text-xs" id="history-pagination-container">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            <label class="text-[#6C757D] font-medium whitespace-nowrap" for="history-page-size-select">Show Data</label>
+            <div class="relative flex items-center justify-between w-full min-w-[76px]">
+              <form action="/admin/history" method="GET" class="w-full">
+                <input type="hidden" name="page" value="1" />
+                <% if (search) { %><input type="hidden" name="q" value="<%= search %>" /><% } %>
+                <select class="w-full appearance-none border border-[#DEE2E6] rounded-xl pl-3 pr-8 py-1.5 text-xs bg-white text-[#212529] font-semibold focus:ring-1 focus:ring-[#212529] focus:outline-none cursor-pointer hover:bg-[#F8F9FA] transition" id="history-page-size-select" name="per_page" onchange="this.form.submit()">
+                  <% [5, 6, 7, 8, 9].forEach(function (n) { %>
+                    <option value="<%= n %>" <%= perPage === n ? 'selected' : '' %>><%= n %></option>
+                  <% }); %>
+                </select>
+              </form>
+              <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[#6C757D]">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                </svg>
+              </span>
+            </div>
+          </div>
+          <span class="text-[#6C757D] text-[11px]" id="history-page-info">
+            Showing <%= (currentPage - 1) * perPage + 1 %> to <%= Math.min(currentPage * perPage, total) %> of <%= total %> entries
+          </span>
+        </div>
+
+        <div class="flex items-center gap-1" id="history-pagination-buttons">
+          <% if (currentPage <= 1) { %>
+            <span class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center opacity-40 cursor-not-allowed text-[#212529]">«</span>
+          <% } else { %>
+            <a href="/admin/history?per_page=<%= perPage %><%= search ? '&q=' + encodeURIComponent(search) : '' %>&page=<%= currentPage - 1 %>" class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center hover:bg-[#F8F9FA] transition text-[#212529]">«</a>
+          <% } %>
+
+          <% for (let p = 1; p <= totalPages; p++) { %>
+            <% if (p === currentPage) { %>
+              <span class="w-7 h-7 rounded-lg bg-[#212529] text-white font-bold flex items-center justify-center"><%= p %></span>
+            <% } else { %>
+              <a href="/admin/history?per_page=<%= perPage %><%= search ? '&q=' + encodeURIComponent(search) : '' %>&page=<%= p %>" class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center hover:bg-[#F8F9FA] transition text-[#212529]"><%= p %></a>
+            <% } %>
+          <% } %>
+
+          <% if (currentPage >= totalPages) { %>
+            <span class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center opacity-40 cursor-not-allowed text-[#212529]">»</span>
+          <% } else { %>
+            <a href="/admin/history?per_page=<%= perPage %><%= search ? '&q=' + encodeURIComponent(search) : '' %>&page=<%= currentPage + 1 %>" class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center hover:bg-[#F8F9FA] transition text-[#212529]">»</a>
+          <% } %>
+        </div>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/admin-footer') %>

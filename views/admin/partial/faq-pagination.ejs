@@ -1,0 +1,55 @@
+<div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-5 mt-4 border-t border-[#DEE2E6] text-xs" id="faq-pagination-container">
+  <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2">
+      <label class="text-[#6C757D] font-medium whitespace-nowrap" for="faq-page-size-select">Show Data</label>
+      <div class="relative flex items-center justify-between w-full min-w-[76px]">
+        <form action="/admin/faq" method="GET" class="w-full">
+          <input type="hidden" name="page" value="1" />
+          <% if (search) { %><input type="hidden" name="q" value="<%= search %>" /><% } %>
+          <% if (category) { %><input type="hidden" name="category" value="<%= category %>" /><% } %>
+          <select class="w-full appearance-none border border-[#DEE2E6] rounded-xl pl-3 pr-8 py-1.5 text-xs bg-white text-[#212529] font-semibold focus:ring-1 focus:ring-[#212529] focus:outline-none cursor-pointer hover:bg-[#F8F9FA] transition" id="faq-page-size-select" name="per_page" onchange="this.form.submit()">
+            <% [5, 6, 7, 8, 9].forEach(function (n) { %>
+              <option value="<%= n %>" <%= perPage === n ? 'selected' : '' %>><%= n %></option>
+            <% }); %>
+          </select>
+        </form>
+        <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[#6C757D]">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+        </span>
+      </div>
+    </div>
+    <span class="text-[#6C757D] text-[11px]" id="faq-page-info">
+      <% if (total === 0) { %>
+        No entries
+      <% } else { %>
+        Showing <%= (currentPage - 1) * perPage + 1 %> to <%= Math.min(currentPage * perPage, total) %> of <%= total %> entries
+      <% } %>
+    </span>
+  </div>
+
+  <div class="flex items-center gap-1" id="faq-pagination-buttons">
+    <% const faqQuery = 'per_page=' + perPage + (search ? '&q=' + encodeURIComponent(search) : '') + (category ? '&category=' + encodeURIComponent(category) : ''); %>
+
+    <% if (currentPage <= 1) { %>
+      <span class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center opacity-40 cursor-not-allowed text-[#212529]">&#171;</span>
+    <% } else { %>
+      <a href="/admin/faq?<%= faqQuery %>&page=<%= currentPage - 1 %>" class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center hover:bg-[#F8F9FA] transition text-[#212529]">&#171;</a>
+    <% } %>
+
+    <% for (let p = 1; p <= totalPages; p++) { %>
+      <% if (p === currentPage) { %>
+        <span class="w-7 h-7 rounded-lg bg-[#212529] text-white font-bold flex items-center justify-center"><%= p %></span>
+      <% } else { %>
+        <a href="/admin/faq?<%= faqQuery %>&page=<%= p %>" class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center hover:bg-[#F8F9FA] transition text-[#212529]"><%= p %></a>
+      <% } %>
+    <% } %>
+
+    <% if (currentPage >= totalPages) { %>
+      <span class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center opacity-40 cursor-not-allowed text-[#212529]">&#187;</span>
+    <% } else { %>
+      <a href="/admin/faq?<%= faqQuery %>&page=<%= currentPage + 1 %>" class="w-7 h-7 rounded-lg border border-[#DEE2E6] flex items-center justify-center hover:bg-[#F8F9FA] transition text-[#212529]">&#187;</a>
+    <% } %>
+  </div>
+</div>

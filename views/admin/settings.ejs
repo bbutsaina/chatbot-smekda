@@ -1,0 +1,67 @@
+<%- include('../partials/admin-header', { title: 'Settings', activePage: 'settings', adminName: adminName }) %>
+
+<section class="space-y-6 font-[Arial,Helvetica,sans-serif]" id="page-settings">
+  <% if (flash) { %>
+    <div class="px-4 py-3 rounded-[12px] text-sm <%= flash.type === 'success' ? 'bg-[#D4EDDA] text-[#155724] border border-[#155724]/20' : 'bg-red-100 border border-red-400 text-red-700' %>">
+      <%= flash.message %>
+    </div>
+  <% } %>
+
+  <% if (formError) { %>
+    <div class="px-4 py-3 rounded-[12px] text-sm bg-red-100 border border-red-400 text-red-700"><%= formError %></div>
+  <% } %>
+
+  <!-- Account Information Section -->
+  <div class="bg-white rounded-2xl border border-[#DEE2E6] shadow-sm p-6 sm:p-8">
+    <h2 class="text-xl font-bold text-[#212529] mb-1">Account</h2>
+    <p class="text-xs text-[#6C757D] mb-6">Informasi akun administrator aktif</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div>
+        <label class="block text-xs font-bold text-[#212529] mb-1.5" for="input-name">Nama Lengkap</label>
+        <input class="w-full px-3.5 py-2 text-sm bg-[#F8F9FA] border border-[#DEE2E6] rounded-xl text-[#212529]" id="input-name" type="text" value="<%= adminName %>" readonly />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-[#212529] mb-1.5" for="input-email">Email</label>
+        <input class="w-full px-3.5 py-2 text-sm bg-[#F8F9FA] border border-[#DEE2E6] rounded-xl text-[#212529]" id="input-email" type="email" value="<%= adminEmail || '' %>" readonly />
+      </div>
+    </div>
+
+    <p class="text-[11px] text-[#6C757D] italic mt-4">
+      Untuk mengubah kata sandi atau data akun, hubungi developer melalui
+      <a class="underline" href="mailto:developer@smekda.sch.id?subject=Permintaan%20Reset%20Password%20Admin%20IRIS-2">developer@smekda.sch.id</a>.
+    </p>
+  </div>
+
+  <!-- Configuration Bot Section -->
+  <div class="bg-white rounded-2xl border border-[#DEE2E6] shadow-sm p-6 sm:p-8">
+    <h2 class="text-base font-bold text-[#212529] mb-4">Configuration Bot</h2>
+    <p class="text-xs text-[#6C757D] mb-5">Pesan yang dibaca bot saat pengunjung menyapa untuk pertama kali dan ketika bot tidak memahami pertanyaan.</p>
+
+    <form action="/admin/settings/update" method="POST" class="space-y-4">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+      <div>
+        <label class="block text-xs font-bold text-[#212529] mb-1.5" for="bot-greeting-msg">
+          Greeting Message <span class="text-rose-500">*</span>
+        </label>
+        <textarea class="w-full p-3 text-sm bg-white border border-[#DEE2E6] rounded-xl focus:ring-1 focus:ring-[#212529] focus:outline-none transition font-[Arial,Helvetica,sans-serif]" id="bot-greeting-msg" name="greeting_message" rows="3" maxlength="1000" required><%= greeting %></textarea>
+        <p class="text-[10px] text-[#6C757D] mt-1">Tampilkan saat pengunjung pertama kali menyapa bot.</p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold text-[#212529] mb-1.5" for="bot-fallback-msg">Fallback Message</label>
+        <textarea class="w-full p-3 text-sm bg-white border border-[#DEE2E6] rounded-xl focus:ring-1 focus:ring-[#212529] focus:outline-none transition font-[Arial,Helvetica,sans-serif]" id="bot-fallback-msg" name="fallback_message" rows="3" maxlength="1000"><%= fallback %></textarea>
+        <p class="text-[10px] text-[#6C757D] mt-1">Tampilkan ketika bot tidak menemukan jawaban yang cocok.</p>
+      </div>
+
+      <div class="flex justify-end mt-6">
+        <button type="submit" class="bg-[#212529] hover:bg-[#343A40] text-white font-bold px-6 py-2.5 rounded-full transition-all duration-150">
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<%- include('../partials/admin-footer') %>
