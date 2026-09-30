@@ -159,20 +159,21 @@ const PORT = process.env.PORT || 3000;
 // a verified connection would only turn a clear startup error into runtime 500s
 // and blank tables. Wrap in an async IIFE because this file is CommonJS.
 async function start() {
-  const adminPool = adminController.pool;
+    try {
+        await adminPool.query('SELECT 1');
+        console.log(`[db] connected to ${process.env.DB_DATABASE || 'db_chatbot'}`);
+    } catch (err) {
+        console.error('[db] connection check failed on startup:', err.message);
+        // Hapus process.exit(1) agar Vercel tidak mati mendadak saat internet lambat
+    }
 
-  try {
-    await adminPool.query('SELECT 1');
-    console.log(`[db] connected to ${process.env.DB_DATABASE || 'db_chatbot'}`);
-  } catch (err) {
-    console.error('[db] connection check failed:', err.code || '', err.message);
-    console.error('[db] verify DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD/DB_DATABASE in .env');
-    process.exit(1);
-  }
-
-  const server = app.listen(PORT, () => {
-    console.log(`IRIS-2 server listening on http://localhost:${PORT}`);
-  });
+    // Hanya menyalakan port jika dijalankan secara lokal (bukan di produksi Vercel)
+    if (process.env.NODE_ENV !== 'production') {
+        app.listen(PORT, () => {
+            console.log(`IRIS-2 server listening on http://localhost:${PORT}`);
+        });
+    }
+}
 
   // Drain in-flight requests before exiting so a deploy does not cut a
   // half-finished save or drop an open session.
@@ -193,7 +194,7 @@ async function start() {
 
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-}
+
 
 start();
 
