@@ -48,7 +48,32 @@ function poolConfig(overrides) {
   };
 }
 
-const pool = mysql.createPool(poolConfig());
+// Serverless hosts freeze idle instances and drop TCP connections without a
+// FIN, so a pooled socket can be dead by the time the next request reuses it.
+// keepAlive plus a conservative idle timeout lets the pool notice and recycle
+// instead of handing out a broken connection.
+const pool = mysql.createPool(
+  poolConfig({
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
+    // TiDB Serverless caps concurrent clusters well below a traditional
+    // server's capacity, so keep the footprint small.
+    connectionLimit: Number(process.env.DB_POOL_LIMIT) || 5,
+    idleTimeout: 60000,
+    maxIdle: 5,
+  })
+);
+
+// A dropped connection surfaces here as a pool-level error event. Without a
+// listener mysql2 emits an unhandled 'error', which crashes the process and
+// shows up as a 500 rather than a single retried query.
+pool.on('error', (err) => {
+  if (err.code === 'ECONNRESET' || err.code === 'PROTOCOL_CONNECTION_LOST') {
+    console.warn('[db] dropped pooled connection, it will be recreated:', err.code);
+    return;
+  }
+  console.error('[db] pool error:', err.code || '', err.message);
+});
 
 module.exports = pool;
 module.exports.poolConfig = poolConfig;

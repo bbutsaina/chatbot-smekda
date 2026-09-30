@@ -2,9 +2,13 @@ require('dotenv').config({ quiet: true });
 
 // Refuse to boot without a real session secret rather than silently signing
 // sessions with a hardcoded fallback that anyone reading the source can forge.
+// On serverless this must not call process.exit: it would kill the invocation
+// and surface as an opaque 500 before any route runs.
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
   console.error('[config] SESSION_SECRET must be set to a random string of 32+ characters.');
-  process.exit(1);
+  if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    process.exit(1);
+  }
 }
 
 const express = require('express');
@@ -63,6 +67,12 @@ const redirectIfAuthenticated = (req, res, next) => {
 };
 
 const crypto = require('crypto');
+
+// Vercel (and any serverless host) runs one process per invocation and calls
+// the exported app directly. It must never bind a port, and it must not exit
+// the process during module load: throwing here produces a 500 for every
+// request instead of a legible startup error.
+const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 // Basic fixed-window rate limit for the public chat endpoint. Each request
 // writes a history_chat row, so an unthrottled endpoint is a cheap way to fill
@@ -155,47 +165,72 @@ app.post('/api/chatbot/query', chatLimiter, chatController.query);
 
 const PORT = process.env.PORT || 3000;
 
-// Fail-hard startup gate. Every admin page reads from MySQL, so booting without
-// a verified connection would only turn a clear startup error into runtime 500s
-// and blank tables. Wrap in an async IIFE because this file is CommonJS.
-async function start() {
-    try {
-        await adminPool.query('SELECT 1');
-        console.log(`[db] connected to ${process.env.DB_DATABASE || 'db_chatbot'}`);
-    } catch (err) {
-        console.error('[db] connection check failed on startup:', err.message);
-        // Hapus process.exit(1) agar Vercel tidak mati mendadak saat internet lambat
-    }
-
-    // Hanya menyalakan port jika dijalankan secara lokal (bukan di produksi Vercel)
-    if (process.env.NODE_ENV !== 'production') {
-        app.listen(PORT, () => {
-            console.log(`IRIS-2 server listening on http://localhost:${PORT}`);
-        });
-    }
+// The pool now lives in config/db.js and is shared by every controller.
+// Verify it without ever letting a connection hiccup take the process down:
+// mysql2 opens sockets lazily, so a brief SSL delay is not fatal and should not
+// block the first request.
+async function verifyDatabase() {
+  try {
+    await Promise.race([
+      adminController.pool.query('SELECT 1'),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('connection check timed out')), 10000).unref()
+      ),
+    ]);
+    console.log(`[db] connected to ${process.env.DB_DATABASE || 'db_chatbot'}`);
+  } catch (err) {
+    // Logged, not fatal. Routes surface their own DB errors, which keeps the
+    // app importable on serverless even when TiDB is briefly unreachable.
+    console.error('[db] connection check failed:', err.message);
+  }
 }
 
-  // Drain in-flight requests before exiting so a deploy does not cut a
-  // half-finished save or drop an open session.
-  const shutdown = (signal) => {
-    console.log(`\n[server] ${signal} received, closing...`);
-    server.close(async () => {
-      try {
-        await adminPool.end();
-        console.log('[db] pool closed');
-      } catch (err) {
-        console.error('[db] pool close failed:', err.message);
-      }
-      process.exit(0);
-    });
-    // Do not hang forever if a socket refuses to close.
-    setTimeout(() => process.exit(1), 10000).unref();
+let server = null;
+
+function start() {
+  verifyDatabase();
+
+  // Serverless invokes the exported app directly; binding a port there is
+  // wrong and keeps the instance alive past the response.
+  if (IS_SERVERLESS) return;
+
+  server = app.listen(PORT, () => {
+    console.log(`IRIS-2 server listening on http://localhost:${PORT}`);
+  });
+}
+
+// Drain in-flight requests before exiting so a deploy does not cut a
+// half-finished save or drop an open session. Only meaningful locally; on
+// serverless the platform reaps the instance.
+function shutdown(signal) {
+  console.log(`\n[server] ${signal} received, closing...`);
+  const finish = async () => {
+    try {
+      await adminController.pool.end();
+      console.log('[db] pool closed');
+    } catch (err) {
+      console.error('[db] pool close failed:', err.message);
+    }
+    process.exit(0);
   };
 
+  if (server) {
+    server.close(finish);
+    // Do not hang forever if a socket refuses to close.
+    setTimeout(() => process.exit(1), 10000).unref();
+  } else {
+    finish();
+  }
+}
+
+if (!IS_SERVERLESS) {
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
-
+}
 
 start();
 
+// Vercel's @vercel/node reads this export to build its route table. Assign it
+// unconditionally so no conditional bootstrap can shadow it.
 module.exports = app;
+module.exports.app = app;
