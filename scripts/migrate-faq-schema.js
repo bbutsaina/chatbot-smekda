@@ -16,13 +16,9 @@
 require('dotenv').config({ quiet: true });
 const mysql = require('mysql2/promise');
 
-const connConfig = {
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: Number(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USERNAME || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_DATABASE || 'db_chatbot',
-};
+// Reuse the shared pool config so migrations connect the same way the app does,
+// including the SSL transport TiDB Cloud requires.
+const connConfig = require('../config/db').poolConfig({});
 
 // The FKs we remove, keyed by constraint name so we never guess.
 const DEAD_FKS = ['respon_ibfk_1', 'respon_ibfk_2', 'respon_ibfk_3'];

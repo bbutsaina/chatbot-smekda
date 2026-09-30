@@ -16,15 +16,50 @@ const SETTINGS = [
   { key: 'fallback_message', value: 'Sorry.... I don’t really catch that :[' },
 ];
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: Number(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USERNAME || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_DATABASE || 'db_chatbot',
-  waitForConnections: true,
-  connectionLimit: 5,
-});
+// Database name from .env. Used in DDL, so validate it as a plain identifier:
+// identifiers cannot be passed as bound parameters, and interpolating an
+// unvalidated string into CREATE DATABASE would allow SQL injection via .env.
+const DB_NAME = process.env.DB_DATABASE || 'db_chatbot';
+if (!/^[A-Za-z0-9_]+$/.test(DB_NAME)) {
+  console.error(
+    `[seed] refusing to continue: DB_DATABASE="${DB_NAME}" is not a valid identifier`
+  );
+  process.exit(1);
+}
+
+// Shared pool config. Includes the SSL transport TiDB Cloud requires; a
+// plaintext connection there fails with "insecure transport are prohibited".
+const poolConfig = require('./config/db').poolConfig;
+
+// Bootstrap pool: no database selected, because selecting one that does not
+// exist yet fails at connect time and would make CREATE DATABASE unreachable.
+let pool = mysql.createPool(poolConfig({ connectionLimit: 1, database: undefined }));
+
+async function ensureDatabaseExists() {
+  await pool.query(
+    `CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin`
+  );
+  console.log(`[seed] database "${DB_NAME}" ready`);
+  // Pool connections opened before the database existed still carry no schema,
+  // so rebuild the pool against it.
+  await pool.end();
+  pool = mysql.createPool(poolConfig({ connectionLimit: 5 }));
+  await pool.query('USE ??', [DB_NAME]);
+  console.log(`[seed] using database "${DB_NAME}"`);
+}
+
+async function ensureSettingsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      \`key\` VARCHAR(191) NOT NULL,
+      \`value\` TEXT NULL,
+      created_at TIMESTAMP NULL DEFAULT NULL,
+      updated_at TIMESTAMP NULL DEFAULT NULL,
+      PRIMARY KEY (\`key\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+  `);
+  console.log('[seed] app_settings table ready');
+}
 
 async function ensureUsersTable() {
   await pool.query(`
@@ -89,6 +124,8 @@ async function seedSettings() {
 
 (async () => {
   try {
+    await ensureDatabaseExists();
+    await ensureSettingsTable();
     await ensureUsersTable();
     await seedAdmin();
     await seedSettings();

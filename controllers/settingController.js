@@ -1,5 +1,4 @@
 require('dotenv').config({ quiet: true });
-const mysql = require('mysql2/promise');
 
 // Keys this controller is allowed to write. Anything else in app_settings is
 // treated as read-only so a crafted request cannot repoint the chatbot's
@@ -8,16 +7,7 @@ const EDITABLE_SETTINGS = ['greeting_message', 'fallback_message'];
 
 const MAX_VALUE_LENGTH = 1000;
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: Number(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USERNAME || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_DATABASE || 'db_chatbot',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-});
+const pool = require('../config/db');
 
 function setFlash(req, type, message) {
   req.session.flash = { type, message };

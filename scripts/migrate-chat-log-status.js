@@ -29,13 +29,8 @@ async function columnExists(conn, table, column) {
 }
 
 async function main() {
-  const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USERNAME || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_DATABASE || 'db_chatbot',
-  });
+  // Shared config keeps the SSL transport TiDB Cloud requires.
+  const conn = await mysql.createConnection(require('../config/db').poolConfig({}));
 
   try {
     if (!(await columnExists(conn, 'history_chat', 'status'))) {
