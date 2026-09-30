@@ -3,6 +3,42 @@ const pool = require('../config/db');
 
 const HARDCODED_FALLBACK = 'Sorry.... I don\u2019t really catch that :[';
 
+// Shown when the database is unreachable, so a student sees guidance rather
+// than a generic error. Distinct from the fallback message, which means "no
+// matching answer"; this one means "we could not check".
+const BUSY_MESSAGE =
+  'Maaf, server database sekolah sedang sibuk. Silakan coba beberapa saat lagi, atau tanyakan hal lain! :[';
+
+// Connection-level failures worth a single retry. Serverless platforms freeze
+// idle instances and close sockets without a clean shutdown, so the pooled
+// connection is often simply stale rather than genuinely broken.
+const RETRYABLE_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EPIPE',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'PROTOCOL_CONNECTION_LOST',
+  'PROTOCOL_SEQUENCE_TIMEOUT',
+  'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR',
+  'PROTOCOL_ENQUEUE_AFTER_QUIT',
+  'POOL_CLOSED',
+  'ER_CON_COUNT_ERROR',
+]);
+
+function isRetryableConnectionError(err) {
+  if (!err) return false;
+  // TLS negotiation against TiDB Serverless can exceed the request budget on a
+  // cold start; that is a timeout worth one more attempt.
+  if (err.code === 'ER_UNKNOWN_ERROR' && /insecure transport|SSL|TLS/i.test(err.message)) {
+    return true;
+  }
+  if (err.fatal === true) return true;
+  return RETRYABLE_CODES.has(err.code);
+}
+
 const MAX_QUERY_LENGTH = 500;
 const MAX_TOKEN_LENGTH = 100;
 
@@ -61,28 +97,47 @@ async function getFallback() {
 }
 
 /**
+ * Resolve a conversation token without assuming a session exists.
+ *
+ * The public chat route deliberately sits outside the admin guard, so
+ * req.session may be absent when session middleware is unavailable. Reading
+ * req.session.chatToken in that case throws and turns the page into a 500.
+ */
+function resolveChatToken(req) {
+  if (req.session && !req.session.chatToken) {
+    req.session.chatToken = require('crypto').randomBytes(12).toString('hex');
+  }
+  const fromSession = req.session && req.session.chatToken;
+  return String(fromSession || require('crypto').randomBytes(12).toString('hex')).slice(
+    0,
+    MAX_TOKEN_LENGTH
+  );
+}
+
+/**
  * GET /chat
  * Renders the student chat interface.
  */
 exports.page = async (req, res) => {
+  // The greeting is a single settings row. If the database is unreachable the
+  // page must still render: a 500 here is what students actually see, and the
+  // chat UI degrades gracefully to the built-in greeting.
+  let greetingMessage = 'Halo! Saya IRIS-2.';
   try {
     const [greetRows] = await pool.query(
       "SELECT `value` FROM app_settings WHERE `key` = 'greeting_message' LIMIT 1"
     );
+    greetingMessage = (greetRows[0] && greetRows[0].value) || greetingMessage;
+  } catch (err) {
+    console.error('[chat] greeting lookup failed, using default:', err.message);
+  }
 
-    // Every visitor gets a conversation token so their messages can be grouped.
-    if (!req.session.chatToken) {
-      req.session.chatToken = require('crypto').randomBytes(12).toString('hex');
-    }
-
-    const greetingMessage =
-      (greetRows[0] && greetRows[0].value) || 'Halo! Saya IRIS-2.';
-
+  try {
     res.render('user/chat', {
       // Exposed under both names so the template can reference either one.
       greeting: greetingMessage,
       greeting_message: greetingMessage,
-      chatToken: req.session.chatToken,
+      chatToken: resolveChatToken(req),
     });
   } catch (err) {
     console.error('[chat] page render failed:', err.message);
@@ -143,10 +198,7 @@ exports.query = async (req, res) => {
     const status = matched ? 'Answered' : 'Unanswered';
 
     // Persist the exchange so the admin Log History view populates.
-    if (!req.session.chatToken) {
-      req.session.chatToken = require('crypto').randomBytes(12).toString('hex');
-    }
-    const token = String(req.session.chatToken).slice(0, MAX_TOKEN_LENGTH);
+    const token = resolveChatToken(req);
 
     await conn.query(
       'INSERT INTO history_chat (token, pesan_masuk, pesan_keluar, status) VALUES (?, ?, ?, ?)',
@@ -164,9 +216,35 @@ exports.query = async (req, res) => {
     });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
+
+    // A dropped pooled socket is recoverable: mysql2 hands back a dead
+    // connection after the platform froze the instance. Clear the whole pool
+    // so the next attempt opens a fresh TLS session, then retry once. Without
+    // this, every request for the life of the warm instance keeps reusing the
+    // broken connection.
+    if (isRetryableConnectionError(err)) {
+      console.warn('[chat] pool connection dropped, resetting and retrying:', err.code);
+      try {
+        await pool.end();
+      } catch (_) {
+        /* pool already closed */
+      }
+      try {
+        return await exports.query(req, res);
+      } catch (retryErr) {
+        console.error('[chat] retry failed:', retryErr.code || '', retryErr.message);
+      }
+    }
+
     // Log the failure server-side, never leak SQL or stack traces to students.
     console.error('[chat] query failed:', err.code || '', err.message);
-    return res.status(500).json({ reply: 'Terjadi gangguan. Silakan coba lagi.', matched: false });
+    // 200 with a readable reply: the chat UI renders data.reply, so a 500 here
+    // would surface as a raw JSON body in place of the message bubble.
+    return res.json({
+      reply: BUSY_MESSAGE,
+      matched: false,
+      status: 'Unanswered',
+    });
   } finally {
     if (conn) conn.release();
   }
