@@ -48,19 +48,24 @@ exports.login = (req, res) => {
         return res.redirect('/admin/login');
       }
 
-      // Regenerate to defeat session fixation before storing admin identity.
-      req.session.regenerate((err) => {
-        if (err) {
-          req.session.loginError = 'Terjadi kesalahan pada server. Silakan coba lagi.';
-          return res.redirect('/admin/login');
-        }
+      // Discard any pre-existing session before storing the admin identity.
+      // cookie-session has no regenerate(), so clear the object instead. This
+      // is the session-fixation defence: a cookie planted before login cannot
+      // survive into the authenticated session.
+      const previous = { ...req.session };
+      req.session = null;
+      req.session = {};
 
-        req.session.adminId = user.id;
-        req.session.adminName = user.name;
-        req.session.adminEmail = user.email;
+      // Carry over only the fields the login view renders. Anything else from
+      // the old session (notably an old CSRF token) is intentionally dropped.
+      if (previous.loginError) req.session.loginError = previous.loginError;
+      if (previous.loginEmail) req.session.loginEmail = previous.loginEmail;
 
-        res.redirect('/admin/dashboard');
-      });
+      req.session.adminId = user.id;
+      req.session.adminName = user.name;
+      req.session.adminEmail = user.email;
+
+      return res.redirect('/admin/dashboard');
     })
     .catch((err) => {
       console.error('[auth] login failed:', err.message);
@@ -71,19 +76,20 @@ exports.login = (req, res) => {
 };
 
 exports.logout = (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      console.error('[auth] session destroy failed:', err.message);
-    }
-    // Clear the session cookie with matching options, otherwise the browser
-    // keeps the stale identifier and the admin appears to still be logged in.
-    res.clearCookie('connect.sid', {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-    });
-    res.redirect('/admin/login');
+  // cookie-session clears state by nulling the session, which makes the
+  // middleware emit an expired cookie on the way out.
+  req.session = null;
+
+  // Clear the cookie explicitly too. The name and attributes must match those
+  // used in server.js, otherwise the browser keeps the old cookie and the
+  // admin still appears to be signed in.
+  res.clearCookie('smekda_session', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
   });
+
+  res.redirect('/admin/login');
 };
 
 exports.pool = pool;

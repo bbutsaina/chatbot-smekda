@@ -1,5 +1,11 @@
 require('dotenv').config({ quiet: true });
 
+// Vercel (and any serverless host) runs one process per invocation and calls
+// the exported app directly. It must never bind a port, and it must not exit
+// the process during module load: throwing here produces a 500 for every
+// request instead of a legible startup error.
+const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
 // Refuse to boot without a real session secret rather than silently signing
 // sessions with a hardcoded fallback that anyone reading the source can forge.
 // On serverless this must not call process.exit: it would kill the invocation
@@ -12,7 +18,7 @@ if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
 }
 
 const express = require('express');
-const session = require('express-session');
+const cookieSession = require('cookie-session');
 const path = require('path');
 const app = express();
 
@@ -22,16 +28,34 @@ const chatController = require('./controllers/chatController');
 const faqController = require('./controllers/faqController');
 const settingController = require('./controllers/settingController');
 
+// Serverless sessions.
+//
+// express-session keeps session state in a MemoryStore, which lives inside a
+// single process. Vercel may route consecutive requests for one admin to
+// different instances, so the cookie arrives with no matching server-side
+// session and the admin is bounced back to /admin/login. Storing the session in
+// a signed cookie removes the dependency on server-side state entirely.
+//
+// Keys come from SESSION_SECRET only. A hardcoded fallback would mean a
+// misconfigured deployment signs sessions with a secret published in this
+// repository, letting anyone forge an admin cookie. The startup guard above
+// refuses to boot without a real secret instead.
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
+  console.error('[config] SESSION_SECRET must be set to a random string of 32+ characters.');
+  if (!IS_SERVERLESS) process.exit(1);
+}
+
 app.use(
-  session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: true,
-    cookie: {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-    },
+  cookieSession({
+    name: 'smekda_session',
+    keys: [process.env.SESSION_SECRET],
+    // Browsers cap a cookie at roughly 4KB. The CSRF token alone is 64 hex
+    // characters, and cookie-session base64-encodes and signs the payload, so
+    // the stored data has to stay small. Do not add large values here.
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    httpOnly: true,
   })
 );
 app.use(express.urlencoded({ extended: true }));
@@ -67,12 +91,6 @@ const redirectIfAuthenticated = (req, res, next) => {
 };
 
 const crypto = require('crypto');
-
-// Vercel (and any serverless host) runs one process per invocation and calls
-// the exported app directly. It must never bind a port, and it must not exit
-// the process during module load: throwing here produces a 500 for every
-// request instead of a legible startup error.
-const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 // Basic fixed-window rate limit for the public chat endpoint. Each request
 // writes a history_chat row, so an unthrottled endpoint is a cheap way to fill
