@@ -76,6 +76,11 @@ function poolConfig(overrides) {
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
+    // TLS handshake against TiDB Serverless on a cold serverless start can
+    // take several seconds. The mysql2 default of 10s is tight enough to raise
+    // ETIMEDOUT during a cold start; 20s gives the handshake room. This bounds
+    // the TCP connect, it does not extend the platform's function timeout.
+    connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT) || 20000,
     ...overrides,
   };
 }

@@ -68,10 +68,38 @@ exports.login = (req, res) => {
       return res.redirect('/admin/dashboard');
     })
     .catch((err) => {
-      console.error('[auth] login failed:', err.message);
-      req.session.loginError = 'Terjadi kesalahan pada server. Silakan coba lagi.';
+      // Log the code alongside the message: a dropped serverless socket
+      // (ETIMEDOUT / ECONNRESET / PROTOCOL_CONNECTION_LOST) looks identical to a
+      // genuine bad password in the browser, so without this the only evidence
+      // is a generic "wrong password" bounce with no server-side cause.
+      console.error(`[auth] login failed [${err.code || 'NOCODE'}]:`, err.message);
+
+      // Distinguish "we could not check your credentials" from "your
+      // credentials are wrong". Telling the admin the database is unreachable
+      // stops them repeatedly retrying a password that may be perfectly valid.
+      const infraCodes = new Set([
+        'ETIMEDOUT',
+        'ECONNREFUSED',
+        'ECONNRESET',
+        'EPIPE',
+        'ENOTFOUND',
+        'EHOSTUNREACH',
+        'ENETUNREACH',
+        'PROTOCOL_CONNECTION_LOST',
+        'POOL_CLOSED',
+      ]);
+      const infraFailure = err.fatal === true || infraCodes.has(err.code);
+
+      req.session.loginError = infraFailure
+        ? 'Koneksi ke database sedang tidak stabil. Mohon tunggu sebentar lalu coba lagi.'
+        : 'Terjadi kesalahan pada server. Silakan coba lagi.';
       req.session.loginEmail = email;
-      res.redirect('/admin/login');
+
+      // 503 marks a retryable dependency failure, so the admin sees a clear
+      // "try again" rather than a wrong-password message. The redirect still
+      // carries the explanation through the session.
+      res.setHeader('Retry-After', '10');
+      return res.redirect(303, '/admin/login');
     });
 };
 

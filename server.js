@@ -195,18 +195,21 @@ const PORT = process.env.PORT || 3000;
 // mysql2 opens sockets lazily, so a brief SSL delay is not fatal and should not
 // block the first request.
 async function verifyDatabase() {
+  const startedAt = Date.now();
   try {
     await Promise.race([
       adminController.pool.query('SELECT 1'),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('connection check timed out')), 10000).unref()
+        setTimeout(() => reject(new Error('connection check timed out')), 20000).unref()
       ),
     ]);
-    console.log(`[db] connected to ${process.env.DB_DATABASE || 'db_chatbot'}`);
+    console.log(`[db] connected to ${adminController.pool.pool.config.database} in ${Date.now() - startedAt}ms`);
   } catch (err) {
-    // Logged, not fatal. Routes surface their own DB errors, which keeps the
+    // Logged, never fatal. Routes report their own DB failures, which keeps the
     // app importable on serverless even when TiDB is briefly unreachable.
-    console.error('[db] connection check failed:', err.message);
+    // A cold start can exceed the platform's function budget, so do not retry
+    // here; the first real request will open a fresh connection.
+    console.error(`[db] connection check failed after ${Date.now() - startedAt}ms:`, err.code || '', err.message);
   }
 }
 
