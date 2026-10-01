@@ -22,6 +22,17 @@ const cookieSession = require('cookie-session');
 const path = require('path');
 const app = express();
 
+// Vercel terminates TLS at its edge proxy and forwards to the function over
+// plain HTTP, adding X-Forwarded-Proto and X-Forwarded-For. Without this,
+// Express reports req.protocol as "http" and req.ip as the proxy's address.
+//
+// That matters for cookies: cookie-session's default secure:"auto" reads
+// req.protocol, so an untrusted proxy makes Express believe the request was
+// plaintext and it refuses to send a Secure cookie. Trust exactly one hop,
+// which is Vercel's, rather than `true`, which would let any client spoof the
+// forwarded headers.
+app.set('trust proxy', 1);
+
 const authController = require('./controllers/authController');
 const adminController = require('./controllers/adminController');
 const chatController = require('./controllers/chatController');
@@ -53,7 +64,15 @@ app.use(
     // characters, and cookie-session base64-encodes and signs the payload, so
     // the stored data has to stay small. Do not add large values here.
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    secure: process.env.NODE_ENV === 'production',
+    // "auto" sets the Secure attribute only when the request arrived over
+    // HTTPS. Combined with `trust proxy` above, Express reads the original
+    // scheme from X-Forwarded-Proto, so production gets Secure cookies while
+    // local http:// development still works.
+    //
+    // Hardcoding `secure: false` would send the admin session cookie over
+    // plain HTTP, exposing it to interception on any non-TLS hop. That trades
+    // a fixable proxy misconfiguration for a real vulnerability.
+    secure: 'auto',
     sameSite: 'lax',
     httpOnly: true,
   })
