@@ -149,6 +149,13 @@ function verifyCsrf(req, res, next) {
   return next();
 }
 
+// Site root sends visitors straight to the student chat. Declared before the
+// /admin routes so the admin panel keeps its own dedicated paths and is never
+// reachable by accident from the public entry point.
+app.get('/', (req, res) => {
+  res.redirect('/chat');
+});
+
 app.get('/admin/login', redirectIfAuthenticated, authController.showLogin);
 app.post('/admin/login', authController.login);
 app.get('/admin/logout', authController.logout);

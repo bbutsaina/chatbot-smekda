@@ -33,13 +33,45 @@ function buildSslOptions() {
   return { rejectUnauthorized: true };
 }
 
+// Application schema name.
+const DEFAULT_DATABASE = 'db_chatbot';
+
+// Schemas that must never be used as the application database. TiDB Serverless
+// provisions a placeholder schema literally named `sys`, and a deployment with
+// DB_DATABASE left at that default connects successfully but then fails every
+// query with "Table 'sys.users' doesn't exist". Same class of mistake as
+// pointing the app at mysql/information_schema.
+const RESERVED_SCHEMAS = new Set([
+  'sys',
+  'mysql',
+  'information_schema',
+  'performance_schema',
+  'metrics_schema',
+]);
+
+function resolveDatabase() {
+  const raw = String(process.env.DB_DATABASE || '').trim();
+
+  if (!raw) return DEFAULT_DATABASE;
+
+  if (RESERVED_SCHEMAS.has(raw.toLowerCase())) {
+    console.warn(
+      `[db] DB_DATABASE="${raw}" is a reserved schema, falling back to "${DEFAULT_DATABASE}". ` +
+        'Set DB_DATABASE in your deployment environment to the application schema.'
+    );
+    return DEFAULT_DATABASE;
+  }
+
+  return raw;
+}
+
 function poolConfig(overrides) {
   return {
     host: process.env.DB_HOST || '127.0.0.1',
     port: Number(process.env.DB_PORT) || 3306,
     user: process.env.DB_USERNAME || 'root',
     password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_DATABASE || 'db_chatbot',
+    database: resolveDatabase(),
     ssl: buildSslOptions(),
     waitForConnections: true,
     connectionLimit: 10,
@@ -78,3 +110,4 @@ pool.on('error', (err) => {
 module.exports = pool;
 module.exports.poolConfig = poolConfig;
 module.exports.buildSslOptions = buildSslOptions;
+module.exports.resolveDatabase = resolveDatabase;
