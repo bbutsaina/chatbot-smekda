@@ -92,18 +92,23 @@ app.use('/admin', (req, res, next) => {
   next();
 });
 
-// Authentication guard. Anything reaching a protected route without a session
-// admin id is bounced to the login view.
-const requireAdmin = (req, res, next) => {
-  if (!req.session.adminId) {
-    return res.redirect('/admin/login');
+// Strict authentication guard for every administrative sub-route. A request is
+// only allowed through when the signed session carries a real admin identity.
+//
+// The login handler stores the identity under `req.session.adminId`
+// (see controllers/authController.js). Guarding on a non-existent key such as
+// `req.session.user` would reject every legitimate admin as well as intruders,
+// so this checks the key that the sign-in flow actually sets.
+const isAdminAuthenticated = (req, res, next) => {
+  if (req.session && req.session.adminId) {
+    return next(); // Session valid, proceed to the protected handler.
   }
-  next();
+  return res.redirect('/admin/login'); // Unauthorized, lock access immediately.
 };
 
 // Send an already-authenticated admin away from the login form.
 const redirectIfAuthenticated = (req, res, next) => {
-  if (req.session.adminId) {
+  if (req.session && req.session.adminId) {
     return res.redirect('/admin/dashboard');
   }
   next();
@@ -176,10 +181,13 @@ app.get('/', (req, res) => {
 });
 
 // `/admin` on its own has no view, so it would otherwise fall through to the
-// "Cannot GET /admin" screen. Forward the bare admin entry point to the login
-// route, which in turn bounces an already-authenticated admin to the dashboard.
+// "Cannot GET /admin" screen. Never blindly forward to the dashboard: check the
+// session first, and only send a genuinely authenticated admin on to it.
 app.get('/admin', (req, res) => {
-  res.redirect('/admin/login');
+  if (req.session && req.session.adminId) {
+    return res.redirect('/admin/dashboard');
+  }
+  return res.redirect('/admin/login');
 });
 
 app.get('/admin/login', redirectIfAuthenticated, authController.showLogin);
@@ -187,26 +195,26 @@ app.post('/admin/login', authController.login);
 app.get('/admin/logout', authController.logout);
 app.post('/admin/logout', verifyCsrf, authController.logout);
 
-app.get('/admin/dashboard', requireAdmin, adminController.dashboard);
-app.get('/admin/faq', requireAdmin, faqController.index);
-app.get('/admin/history', requireAdmin, adminController.history);
-app.get('/admin/settings', requireAdmin, settingController.index);
-app.get('/admin/support', requireAdmin, adminController.support);
+app.get('/admin/dashboard', isAdminAuthenticated, adminController.dashboard);
+app.get('/admin/faq', isAdminAuthenticated, faqController.index);
+app.get('/admin/history', isAdminAuthenticated, adminController.history);
+app.get('/admin/settings', isAdminAuthenticated, settingController.index);
+app.get('/admin/support', isAdminAuthenticated, adminController.support);
 
 // Canonical create path used by the Add New Data form. `/admin/faq` is kept as
 // an alias so existing bookmarks and older cached forms keep working.
-app.post('/admin/faq/store', requireAdmin, verifyCsrf, faqController.store);
-app.post('/admin/faq', requireAdmin, verifyCsrf, faqController.store);
-app.post('/admin/faq/:id', requireAdmin, verifyCsrf, faqController.update);
-app.post('/admin/faq/:id/delete', requireAdmin, verifyCsrf, faqController.destroy);
+app.post('/admin/faq/store', isAdminAuthenticated, verifyCsrf, faqController.store);
+app.post('/admin/faq', isAdminAuthenticated, verifyCsrf, faqController.store);
+app.post('/admin/faq/:id', isAdminAuthenticated, verifyCsrf, faqController.update);
+app.post('/admin/faq/:id/delete', isAdminAuthenticated, verifyCsrf, faqController.destroy);
 
 // Canonical settings write endpoint, plus the legacy alias kept from the
 // earlier wiring so existing bookmarks and forms do not 404.
-app.post('/admin/settings/update', requireAdmin, verifyCsrf, settingController.update);
-app.post('/admin/settings', requireAdmin, verifyCsrf, settingController.update);
+app.post('/admin/settings/update', isAdminAuthenticated, verifyCsrf, settingController.update);
+app.post('/admin/settings', isAdminAuthenticated, verifyCsrf, settingController.update);
 
 // Keep the legacy Laravel log path working as an alias of the history page.
-app.get('/admin/logs', requireAdmin, adminController.history);
+app.get('/admin/logs', isAdminAuthenticated, adminController.history);
 
 // Public student chat. Deliberately outside /admin: no session guard, because
 // students are not authenticated. Writes to history_chat are rate-limited below.
