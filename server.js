@@ -175,6 +175,13 @@ app.get('/', (req, res) => {
   res.redirect('/chat');
 });
 
+// `/admin` on its own has no view, so it would otherwise fall through to the
+// "Cannot GET /admin" screen. Forward the bare admin entry point to the login
+// route, which in turn bounces an already-authenticated admin to the dashboard.
+app.get('/admin', (req, res) => {
+  res.redirect('/admin/login');
+});
+
 app.get('/admin/login', redirectIfAuthenticated, authController.showLogin);
 app.post('/admin/login', authController.login);
 app.get('/admin/logout', authController.logout);
