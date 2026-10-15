@@ -17,13 +17,19 @@ exports.showLogin = (req, res) => {
 };
 
 exports.login = (req, res) => {
-  const email = (req.body.email || '').trim();
-  const password = req.body.password || '';
+  // Body values may be absent (unsupported/unparsed content type) or non-string
+  // (a crafted JSON body sending an array or object). Coerce defensively so the
+  // handler never throws a TypeError and never feeds a non-string into bcrypt.
+  const body = req.body || {};
+  const email = (typeof body.email === 'string' ? body.email : '').trim();
+  const password = typeof body.password === 'string' ? body.password : '';
 
-  if (!email || !password) {
+  // A standard email is bounded at 254 characters. Reject anything longer before
+  // it reaches the driver instead of handing an unbounded string to the query.
+  if (!email || !password || email.length > 254) {
     req.session.loginError = GENERIC_ERROR;
     req.session.loginEmail = email;
-    return res.redirect('/admin/login');
+    return res.redirect(303, '/admin/login');
   }
 
   pool
@@ -45,7 +51,7 @@ exports.login = (req, res) => {
       if (!user || !ok) {
         req.session.loginError = GENERIC_ERROR;
         req.session.loginEmail = email;
-        return res.redirect('/admin/login');
+        return res.redirect(303, '/admin/login');
       }
 
       // Discard any pre-existing session before storing the admin identity.
@@ -65,7 +71,10 @@ exports.login = (req, res) => {
       req.session.adminName = user.name;
       req.session.adminEmail = user.email;
 
-      return res.redirect('/admin/dashboard');
+      // 303 forces the browser/webview to follow up with a GET. A bare 302 after
+      // a POST is ambiguous and some proxies/webviews replay the POST against
+      // /admin/dashboard (which has no POST route), producing a bounce loop.
+      return res.redirect(303, '/admin/dashboard');
     })
     .catch((err) => {
       // Log the code alongside the message: a dropped serverless socket
