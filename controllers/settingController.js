@@ -1,24 +1,25 @@
 require('dotenv').config({ quiet: true });
 
-// Keys this controller is allowed to write. Anything else in app_settings is
-// treated as read-only so a crafted request cannot repoint the chatbot's
-// configuration at arbitrary rows.
+// key boleh diubah
 const EDITABLE_SETTINGS = ['greeting_message', 'fallback_message'];
 
 const MAX_VALUE_LENGTH = 1000;
 
 const pool = require('../config/db');
 
+// simpan pesan flash
 function setFlash(req, type, message) {
   req.session.flash = { type, message };
 }
 
+// ambil pesan flash
 function consumeFlash(req) {
   const flash = req.session.flash || null;
   delete req.session.flash;
   return flash;
 }
 
+// baca semua pengaturan
 function readSettings() {
   return pool.query('SELECT `key`, `value` FROM app_settings').then(([rows]) => {
     const settings = {};
@@ -29,6 +30,7 @@ function readSettings() {
   });
 }
 
+// tampilkan pengaturan sapaan & fallback
 exports.index = (req, res) => {
   readSettings()
     .then((settings) => {
@@ -50,6 +52,7 @@ exports.index = (req, res) => {
     });
 };
 
+// simpan update pengaturan bot
 exports.update = (req, res) => {
   const greeting = typeof req.body.greeting_message === 'string'
     ? req.body.greeting_message.trim()
@@ -76,8 +79,7 @@ exports.update = (req, res) => {
     fallback_message: fallback,
   };
 
-  // Upsert each whitelisted key. ON DUPLICATE KEY UPDATE keeps this a single
-  // round trip whether the row is new or already configured.
+  // upsert key whitelist
   Promise.all(
     EDITABLE_SETTINGS.map((key) =>
       pool.query(

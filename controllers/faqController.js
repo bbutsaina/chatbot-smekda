@@ -11,8 +11,7 @@ const LEN = {
   response: 65535, // `isi` is a TEXT column
 };
 
-// Escape a value for embedding inside a single-quoted JS string literal in an
-// inline HTML attribute. Must run on the raw value before EJS HTML-escapes it.
+// escape nilai untuk atribut
 function jsAttr(value) {
   return String(value == null ? '' : value)
     .replace(/\\/g, '\\\\')
@@ -21,33 +20,37 @@ function jsAttr(value) {
     .replace(/\n/g, '\\n');
 }
 
+// batasi ukuran halaman
 function readPageSize(raw, fallback) {
   const parsed = parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
   return Math.min(parsed, MAX_PAGE_SIZE);
 }
 
+// cek id faq valid
 function parseFaqId(raw) {
   const id = parseInt(raw, 10);
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+// bersihkan input string
 function body(field) {
   return typeof field === 'string' ? field.trim() : '';
 }
 
+// ambil pesan flash
 function consumeFlash(req) {
   const flash = req.session.flash || null;
   delete req.session.flash;
   return flash;
 }
 
+// simpan pesan flash
 function setFlash(req, type, message) {
   req.session.flash = { type, message };
 }
 
-// Return the admin to the FAQ list, preserving their current filters when the
-// referrer is same-origin. Falls back to the plain list.
+// kembali ke daftar faq
 function backToFaq(req, res) {
   const ref = req.get('Referer') || '';
   const origin = `${req.protocol}://${req.get('host')}`;
@@ -57,16 +60,13 @@ function backToFaq(req, res) {
   return res.redirect('/admin/faq');
 }
 
-/**
- * Validate the four FAQ fields. Returns either `{ ok: true, values }` or
- * `{ ok: false, message, values }` so the caller can re-render what was typed.
- */
+// validasi id & input faq
 function validate(payload) {
   const values = {
     menu: body(payload.menu),
     label: body(payload.label),
     keywords: body(payload.keywords),
-    // Field name must stay in sync with the form input in views/admin/faq.ejs.
+    // nama field sesuai form
     responseText: body(payload.response),
   };
 
@@ -81,39 +81,35 @@ function validate(payload) {
   return { ok: true, values };
 }
 
-/**
- * GET /admin/faq
- * Lists FAQ rows with menu / label / keywords / response, plus the distinct
- * menus that populate the category filter.
- */
+// tampilkan, cari & join faq
 exports.index = async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const perPage = readPageSize(req.query.per_page, DEFAULT_PAGE_SIZE);
   const search = (req.query.q || '').trim();
   const category = (req.query.category || '').trim();
 
-  // `kode` is legacy and nullable, so filter against the new columns instead.
   const filters = [];
   const params = [];
 
   if (search) {
-    filters.push('(menu LIKE ? OR label LIKE ? OR kata_pemicu LIKE ? OR isi LIKE ?)');
+    filters.push('(r.menu LIKE ? OR r.label LIKE ? OR r.kata_pemicu LIKE ? OR r.isi LIKE ?)');
     params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
   }
   if (category) {
-    filters.push('menu = ?');
+    filters.push('r.menu = ?');
     params.push(category);
   }
 
   const whereSql = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const joinSql = 'FROM respon r LEFT JOIN users u ON r.created_by = u.id';
 
   try {
     const [[count], [rows], [menus]] = await Promise.all([
-      pool.query(`SELECT COUNT(*) AS total FROM respon ${whereSql}`, params),
+      pool.query(`SELECT COUNT(*) AS total ${joinSql} ${whereSql}`, params),
       pool.query(
-        `SELECT id, menu, label, kata_pemicu, isi
-           FROM respon ${whereSql}
-          ORDER BY menu ASC, label ASC, id ASC
+        `SELECT r.id, r.menu, r.label, r.kata_pemicu, r.isi, u.name AS authorName
+           ${joinSql} ${whereSql}
+          ORDER BY r.menu ASC, r.label ASC, r.id ASC
           LIMIT ? OFFSET ?`,
         [...params, perPage, (page - 1) * perPage]
       ),
@@ -133,7 +129,7 @@ exports.index = async (req, res) => {
         label: r.label,
         keywords: r.kata_pemicu,
         responseText: r.isi,
-        // pre-escaped for safe use inside inline onclick handlers
+        authorName: r.authorName || '-',
         jsMenu: jsAttr(r.menu),
         jsLabel: jsAttr(r.label),
         jsKeywords: jsAttr(r.kata_pemicu),
@@ -158,15 +154,9 @@ exports.index = async (req, res) => {
   }
 };
 
-/**
- * POST /admin/faq/store
- * Creates one FAQ row. `kode` is kept populated with the label so any legacy
- * consumer still reading `kode` continues to work.
- */
+// simpan faq baru (create)
 exports.store = async (req, res) => {
-  // Destructured up front so the contract with views/admin/faq.ejs is explicit.
-  // These names must match the form inputs exactly:
-  //   menu, label, keywords, response
+  // nama field sesuai form
   const { menu, label, keywords, response } = req.body || {};
 
   const parsed = validate(req.body);
@@ -174,8 +164,6 @@ exports.store = async (req, res) => {
   if (!parsed.ok) {
     req.session.formError = parsed.message;
     req.session.formValues = parsed.values;
-    // Log the mismatch server-side: a silent 302 with a form error is exactly
-    // how the previous response/response_text bug hid for so long.
     console.warn(
       `[faq] store rejected. sent=${JSON.stringify({ menu, label, keywords, response })}`
     );
@@ -186,7 +174,6 @@ exports.store = async (req, res) => {
 
   let conn;
   try {
-    // A transaction so a failed insert cannot leave a half-written FAQ row.
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
@@ -201,7 +188,6 @@ exports.store = async (req, res) => {
     return backToFaq(req, res);
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
-    // Never surface a raw driver error or stack trace to the browser.
     console.error('[faq] store failed:', err.code || '', err.message);
     const timedOut = ['PROTOCOL_CONNECTION_LOST', 'ETIMEDOUT', 'ECONNREFUSED', 'ER_LOCK_WAIT_TIMEOUT', 'ER_LOCK_DEADLOCK'].includes(err.code);
     req.session.formError = timedOut
@@ -214,7 +200,7 @@ exports.store = async (req, res) => {
   }
 };
 
-/** POST /admin/faq/:id */
+// ubah data faq (update)
 exports.update = async (req, res) => {
   const id = parseFaqId(req.params.id);
   const parsed = validate(req.body);
@@ -249,7 +235,7 @@ exports.update = async (req, res) => {
   }
 };
 
-/** POST /admin/faq/:id/delete */
+// hapus data faq (delete)
 exports.destroy = async (req, res) => {
   const id = parseFaqId(req.params.id);
 

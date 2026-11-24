@@ -1,15 +1,7 @@
 require('dotenv').config({ quiet: true });
 
-// Vercel (and any serverless host) runs one process per invocation and calls
-// the exported app directly. It must never bind a port, and it must not exit
-// the process during module load: throwing here produces a 500 for every
-// request instead of a legible startup error.
 const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-// Refuse to boot without a real session secret rather than silently signing
-// sessions with a hardcoded fallback that anyone reading the source can forge.
-// On serverless this must not call process.exit: it would kill the invocation
-// and surface as an opaque 500 before any route runs.
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
   console.error('[config] SESSION_SECRET must be set to a random string of 32+ characters.');
   if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -22,15 +14,6 @@ const cookieSession = require('cookie-session');
 const path = require('path');
 const app = express();
 
-// Vercel terminates TLS at its edge proxy and forwards to the function over
-// plain HTTP, adding X-Forwarded-Proto and X-Forwarded-For. Without this,
-// Express reports req.protocol as "http" and req.ip as the proxy's address.
-//
-// That matters for cookies: cookie-session's default secure:"auto" reads
-// req.protocol, so an untrusted proxy makes Express believe the request was
-// plaintext and it refuses to send a Secure cookie. Trust exactly one hop,
-// which is Vercel's, rather than `true`, which would let any client spoof the
-// forwarded headers.
 app.set('trust proxy', 1);
 
 const authController = require('./controllers/authController');
@@ -39,52 +22,47 @@ const chatController = require('./controllers/chatController');
 const faqController = require('./controllers/faqController');
 const settingController = require('./controllers/settingController');
 
-// Serverless sessions.
-//
-// express-session keeps session state in a MemoryStore, which lives inside a
-// single process. Vercel may route consecutive requests for one admin to
-// different instances, so the cookie arrives with no matching server-side
-// session and the admin is bounced back to /admin/login. Storing the session in
-// a signed cookie removes the dependency on server-side state entirely.
-//
-// Keys come from SESSION_SECRET only. A hardcoded fallback would mean a
-// misconfigured deployment signs sessions with a secret published in this
-// repository, letting anyone forge an admin cookie. The startup guard above
-// refuses to boot without a real secret instead.
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
   console.error('[config] SESSION_SECRET must be set to a random string of 32+ characters.');
   if (!IS_SERVERLESS) process.exit(1);
 }
 
+const isProduction = process.env.NODE_ENV === 'production';
+const isLocalhost = Boolean(
+  !process.env.VERCEL &&
+  !process.env.AWS_LAMBDA_FUNCTION_NAME &&
+  (process.env.NODE_ENV !== 'production' || process.env.HOST === 'localhost' || !process.env.HOST)
+);
+const cookieSecure = isProduction && !isLocalhost;
+
+// atur cookie session login
 app.use(
   cookieSession({
     name: 'smekda_session',
     keys: [process.env.SESSION_SECRET],
-    // Browsers cap a cookie at roughly 4KB. The CSRF token alone is 64 hex
-    // characters, and cookie-session base64-encodes and signs the payload, so
-    // the stored data has to stay small. Do not add large values here.
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    // "auto" sets the Secure attribute only when the request arrived over
-    // HTTPS. Combined with `trust proxy` above, Express reads the original
-    // scheme from X-Forwarded-Proto, so production gets Secure cookies while
-    // local http:// development still works.
-    //
-    // Hardcoding `secure: false` would send the admin session cookie over
-    // plain HTTP, exposing it to interception on any non-TLS hop. That trades
-    // a fixable proxy misconfiguration for a real vulnerability.
-    secure: 'auto',
+    maxAge: 24 * 60 * 60 * 1000,
+    secure: cookieSecure,
     sameSite: 'lax',
     httpOnly: true,
   })
 );
+
+app.use((req, res, next) => {
+  if (req.session && typeof req.session.save !== 'function') {
+    req.session.save = (fn) => {
+      if (typeof fn === 'function') fn();
+      return Promise.resolve();
+    };
+  }
+  next();
+});
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Block browser/proxy caching across the whole admin area so the Back button
-// cannot replay an authenticated dashboard after logout.
+// anti cache halaman admin
 app.use('/admin', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
@@ -92,23 +70,17 @@ app.use('/admin', (req, res, next) => {
   next();
 });
 
-// Strict authentication guard for every administrative sub-route. A request is
-// only allowed through when the signed session carries a real admin identity.
-//
-// The login handler stores the identity under `req.session.adminId`
-// (see controllers/authController.js). Guarding on a non-existent key such as
-// `req.session.user` would reject every legitimate admin as well as intruders,
-// so this checks the key that the sign-in flow actually sets.
+// satpam cek login admin
 const isAdminAuthenticated = (req, res, next) => {
-  if (req.session && req.session.adminId) {
-    return next(); // Session valid, proceed to the protected handler.
+  if (req.session && (req.session.admin || req.session.adminId)) {
+    return next();
   }
-  return res.redirect('/admin/login'); // Unauthorized, lock access immediately.
+  return res.redirect('/admin/login');
 };
 
-// Send an already-authenticated admin away from the login form.
+// redirect kalau sudah login
 const redirectIfAuthenticated = (req, res, next) => {
-  if (req.session && req.session.adminId) {
+  if (req.session && (req.session.admin || req.session.adminId)) {
     return res.redirect('/admin/dashboard');
   }
   next();
@@ -116,9 +88,7 @@ const redirectIfAuthenticated = (req, res, next) => {
 
 const crypto = require('crypto');
 
-// Basic fixed-window rate limit for the public chat endpoint. Each request
-// writes a history_chat row, so an unthrottled endpoint is a cheap way to fill
-// the table. 30 questions per minute per IP is generous for a real student.
+// batasi spam pesan chat
 const CHAT_WINDOW_MS = 60 * 1000;
 const CHAT_MAX_PER_WINDOW = 30;
 const chatHits = new Map();
@@ -136,14 +106,17 @@ function chatLimiter(req, res, next) {
   }
   if (hits.count >= CHAT_MAX_PER_WINDOW) {
     res.setHeader('Retry-After', Math.ceil((CHAT_WINDOW_MS - (now - hits.start)) / 1000));
-    return res.status(429).json({ reply: 'Terlalu banyak pertanyaan. Coba lagi sebentar.', matched: false });
+    return res.status(429).json({
+      reply: "Whoa, slow down a bit! You're typing too fast :c Please wait a moment before sending more messages =[",
+      matched: false,
+      status: 'RateLimited',
+    });
   }
   hits.count += 1;
   return next();
 }
 
-// Per-session CSRF token. Exposed to every admin view so forms can post it
-// back, and verified on every state-changing admin request.
+// buat & cek token csrf
 app.use((req, res, next) => {
   if (!req.session.csrfToken) {
     req.session.csrfToken = crypto.randomBytes(32).toString('hex');
@@ -158,40 +131,49 @@ function verifyCsrf(req, res, next) {
   if (SAFE_METHODS.has(req.method)) return next();
 
   const sent = req.body && req.body._csrf;
-  const expected = req.session.csrfToken;
+  const expected = req.session && req.session.csrfToken;
 
   if (!sent || !expected) {
+    if (req.path === '/admin/login' || req.originalUrl.startsWith('/admin')) {
+      return res.status(403).render('admin/login', {
+        error: 'Sesi kedaluwarsa atau token CSRF tidak valid. Silakan muat ulang halaman.',
+        email: (req.body && req.body.email) || '',
+        csrfToken: (req.session && req.session.csrfToken) || res.locals.csrfToken || '',
+      });
+    }
     return res.status(403).send('Sesi kedaluwarsa. Muat ulang halaman lalu coba lagi.');
   }
 
   const a = Buffer.from(String(sent));
   const b = Buffer.from(String(expected));
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    if (req.path === '/admin/login' || req.originalUrl.startsWith('/admin')) {
+      return res.status(403).render('admin/login', {
+        error: 'Token keamanan tidak valid. Silakan coba lagi.',
+        email: (req.body && req.body.email) || '',
+        csrfToken: (req.session && req.session.csrfToken) || res.locals.csrfToken || '',
+      });
+    }
     return res.status(403).send('Token keamanan tidak valid. Muat ulang halaman lalu coba lagi.');
   }
 
   return next();
 }
 
-// Site root sends visitors straight to the student chat. Declared before the
-// /admin routes so the admin panel keeps its own dedicated paths and is never
-// reachable by accident from the public entry point.
+// daftar route halaman & api
 app.get('/', (req, res) => {
   res.redirect('/chat');
 });
 
-// `/admin` on its own has no view, so it would otherwise fall through to the
-// "Cannot GET /admin" screen. Never blindly forward to the dashboard: check the
-// session first, and only send a genuinely authenticated admin on to it.
 app.get('/admin', (req, res) => {
-  if (req.session && req.session.adminId) {
+  if (req.session && (req.session.admin || req.session.adminId)) {
     return res.redirect('/admin/dashboard');
   }
   return res.redirect('/admin/login');
 });
 
 app.get('/admin/login', redirectIfAuthenticated, authController.showLogin);
-app.post('/admin/login', authController.login);
+app.post('/admin/login', verifyCsrf, authController.login);
 app.get('/admin/logout', authController.logout);
 app.post('/admin/logout', verifyCsrf, authController.logout);
 
@@ -201,33 +183,23 @@ app.get('/admin/history', isAdminAuthenticated, adminController.history);
 app.get('/admin/settings', isAdminAuthenticated, settingController.index);
 app.get('/admin/support', isAdminAuthenticated, adminController.support);
 
-// Canonical create path used by the Add New Data form. `/admin/faq` is kept as
-// an alias so existing bookmarks and older cached forms keep working.
 app.post('/admin/faq/store', isAdminAuthenticated, verifyCsrf, faqController.store);
 app.post('/admin/faq', isAdminAuthenticated, verifyCsrf, faqController.store);
 app.post('/admin/faq/:id', isAdminAuthenticated, verifyCsrf, faqController.update);
 app.post('/admin/faq/:id/delete', isAdminAuthenticated, verifyCsrf, faqController.destroy);
 
-// Canonical settings write endpoint, plus the legacy alias kept from the
-// earlier wiring so existing bookmarks and forms do not 404.
 app.post('/admin/settings/update', isAdminAuthenticated, verifyCsrf, settingController.update);
 app.post('/admin/settings', isAdminAuthenticated, verifyCsrf, settingController.update);
 
-// Keep the legacy Laravel log path working as an alias of the history page.
 app.get('/admin/logs', isAdminAuthenticated, adminController.history);
 
-// Public student chat. Deliberately outside /admin: no session guard, because
-// students are not authenticated. Writes to history_chat are rate-limited below.
 app.get('/chat', chatController.page);
 
 app.post('/api/chatbot/query', chatLimiter, chatController.query);
 
 const PORT = process.env.PORT || 3000;
 
-// The pool now lives in config/db.js and is shared by every controller.
-// Verify it without ever letting a connection hiccup take the process down:
-// mysql2 opens sockets lazily, so a brief SSL delay is not fatal and should not
-// block the first request.
+// cek koneksi database awal
 async function verifyDatabase() {
   const startedAt = Date.now();
   try {
@@ -239,21 +211,16 @@ async function verifyDatabase() {
     ]);
     console.log(`[db] connected to ${adminController.pool.pool.config.database} in ${Date.now() - startedAt}ms`);
   } catch (err) {
-    // Logged, never fatal. Routes report their own DB failures, which keeps the
-    // app importable on serverless even when TiDB is briefly unreachable.
-    // A cold start can exceed the platform's function budget, so do not retry
-    // here; the first real request will open a fresh connection.
     console.error(`[db] connection check failed after ${Date.now() - startedAt}ms:`, err.code || '', err.message);
   }
 }
 
 let server = null;
 
+// jalankan server aplikasi
 function start() {
   verifyDatabase();
 
-  // Serverless invokes the exported app directly; binding a port there is
-  // wrong and keeps the instance alive past the response.
   if (IS_SERVERLESS) return;
 
   server = app.listen(PORT, () => {
@@ -261,9 +228,7 @@ function start() {
   });
 }
 
-// Drain in-flight requests before exiting so a deploy does not cut a
-// half-finished save or drop an open session. Only meaningful locally; on
-// serverless the platform reaps the instance.
+// tutup server & pool
 function shutdown(signal) {
   console.log(`\n[server] ${signal} received, closing...`);
   const finish = async () => {
@@ -278,7 +243,6 @@ function shutdown(signal) {
 
   if (server) {
     server.close(finish);
-    // Do not hang forever if a socket refuses to close.
     setTimeout(() => process.exit(1), 10000).unref();
   } else {
     finish();
@@ -292,7 +256,5 @@ if (!IS_SERVERLESS) {
 
 start();
 
-// Vercel's @vercel/node reads this export to build its route table. Assign it
-// unconditionally so no conditional bootstrap can shadow it.
 module.exports = app;
 module.exports.app = app;

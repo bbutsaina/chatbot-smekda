@@ -1,347 +1,367 @@
-# IRIS-2: AI-Powered School Information Chatbot System - SMKN 2 Purwakarta
+# IRIS-2 — AI-Powered School Information Chatbot
 
-A lightweight, high-performance web-based Chatbot application built on Node.js Express architecture to provide real-time, dynamic school information services for SMKN 2 Purwakarta, fully integrated with a MySQL database backend.
+**SMKN 2 Purwakarta · Chatbot Akademik + Portal Admin**
 
-> **Implementation status:** the admin portal is complete and verified (61 end-to-end checks passing). The public student chat interface and the keyword-matching reply engine are **not yet implemented** — see [Current Status](#current-status) before planning further work. This document describes what exists today rather than what is planned.
+IRIS-2 (*Interactive Response & Information System*) adalah aplikasi web chatbot yang memberikan informasi sekolah secara real-time kepada siswa, orang tua, dan masyarakat. Sistem terdiri dari dua bagian:
+
+1. **Antarmuka chat publik** (`/chat`) — pengunjung bertanya tanpa login. Jawaban dihasilkan oleh Google Gemini yang dibatasi oleh basis pengetahuan FAQ, dengan mesin pencocokan lokal sebagai cadangan saat AI tidak tersedia.
+2. **Portal admin** (`/admin/*`) — administrator mengelola FAQ, membaca log percakapan, mengatur sapaan/pesan fallback, dan melihat statistik.
+
+Dokumen pendukung penilaian UKK:
+
+- `PRESENTATION_GUIDE.md` — cheat sheet sidang (arsitektur, routes, keamanan, auth, fitur, alasan tech stack).
+- `QA_TEST_CASE.md` — 15 test case fungsional & keamanan.
+- `db_chatbot.sql` — export lengkap struktur + data dummy (termasuk foreign key).
 
 ---
 
-## Table of Contents
+## Daftar Isi
 
-- [Current Status](#current-status)
-- [Core Features](#core-features)
 - [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Local Installation Guide](#local-installation-guide)
+- [Struktur Folder (MVC)](#struktur-folder-mvc)
+- [Instalasi Lokal](#instalasi-lokal)
+- [Konfigurasi `.env`](#konfigurasi-env)
 - [Database Schema](#database-schema)
-- [Security Measures](#security-measures)
-- [Configuration](#configuration)
-- [API Reference](#api-reference)
-- [Troubleshooting](#troubleshooting)
+- [Daftar Akun Uji Coba](#daftar-akun-uji-coba)
+- [Fitur Utama](#fitur-utama)
+- [Dokumentasi API](#dokumentasi-api)
+- [Keamanan](#keamanan)
 - [Developer Credit](#developer-credit)
-
----
-
-## Current Status
-
-Being explicit about scope avoids shipping false expectations in a thesis submission.
-
-| Component | State | Notes |
-|---|---|---|
-| Admin authentication | **Done** | Bcrypt hashing, session gatekeeping, login/logout |
-| Admin dashboard | **Done** | Session, keyword and unanswered counters, recent activity |
-| FAQ management (CRUD) | **Done** | Menu / Label / Keywords / Response / Action columns |
-| FAQ search + pagination | **Done** | Keyword search, menu filter, 5–9 rows-per-page selector |
-| History log viewer | **Done** | Searchable `history_chat` records |
-| Settings page | **Done** | Edits `greeting_message` and `fallback_message` in `app_settings` |
-| Support page | **Done** | Static guidance and contact links |
-| **Public student chat UI** | **Not built** | No frontend chat widget exists yet |
-| **Keyword matching engine** | **Not built** | No endpoint reads `kata_pemicu` and returns `isi` |
-| **Chat logging on reply** | **Not built** | `history_chat` is read but never written to |
-
-The `respon` table, the `app_settings` table and the `history_chat` table are fully prepared and writable. What is missing is the runtime piece that connects an incoming student message to a FAQ answer and records the exchange.
-
----
-
-## Core Features
-
-- **Responsive Student Chat Interface** *(planned)* — Tailwind CSS layout intended for a v0/Stitch AI design. The admin panel uses this layout today; the student-facing chat widget is not yet implemented.
-- **Dynamic FAQ Database Matching with Fallback Handling** *(data layer ready)* — FAQ entries are stored with trigger keywords and replies, and the fallback message `Sorry.... I don't really catch that :[` is editable from the Settings page. The matching engine that consumes them is not yet implemented.
-- **Secure Admin Authentication & Gatekeeping** — Bcryptjs-compatible password hashing with `express-session` protection. Every admin route is guarded by a session check and returns a redirect to login when unauthenticated.
-- **Full Admin Panel Dashboard CRUD Operations** — Complete create, read, update and delete operations over FAQ data, tracking the Menu, Label, Keywords, Response and Action columns.
-- **Keyword Search Bar & Automated Data Logging History Records** — Searchable FAQ records with menu filtering and a selectable rows-per-page control, alongside a log viewer over `history_chat` records.
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js (CommonJS) |
-| Framework | Express.js 5.x |
-| Database | MySQL via `mysql2/promise` connection pooling |
-| Templating | EJS (Embedded JavaScript Templates) |
-| Auth hashing | Bcryptjs (seed.js) / bcrypt (authController.js) |
-| Sessions | express-session |
-| Configuration | Dotenv |
-| Styling | Tailwind CSS utility classes (CDN, no build step) |
+| Layer | Teknologi | Catatan |
+|---|---|---|
+| Runtime | Node.js (CommonJS) | Async I/O untuk query DB + panggilan AI |
+| Framework | Express.js 5.x | Middleware pipeline transparan di `server.js` |
+| Database | TiDB Cloud Serverless (MySQL-compatible) via `mysql2/promise` | SSL wajib, connection pool terpusat |
+| Model / ORM | Native SQL + prepared statement (`?`) | Tidak memakai ORM berat |
+| View | EJS + Tailwind CSS (CDN) | Server-side rendering, tanpa build step |
+| Controller | `controllers/*.js` | 5 controller: auth, admin, faq, setting, chat |
+| AI | `@google/genai` — `gemini-3.5-flash-lite` | `systemInstruction` berisi seluruh FAQ + aturan percakapan |
+| Auth hash | `bcryptjs` (cost 10) | Dipakai seed & verifikasi login |
+| Session | `cookie-session` | Cookie signed `smekda_session`, 24 jam |
+| Konfigurasi | `dotenv` | Semua kredensial di `.env` |
+| Deploy | Vercel (`vercel.json`) | Serverless: `app` di-export, port tidak di-bind |
 
-> **Note on the two bcrypt packages.** `authController.js` uses the native `bcrypt` module for password comparison, while `seed.js` uses the pure-JavaScript `bcryptjs`. Both produce and verify identical hash formats, so seeded credentials authenticate correctly. `bcryptjs` is retained deliberately because the native module requires a build toolchain on some hosts. You may consolidate on either one, but keep the seeding and verification sides consistent.
-
----
-
-## Architecture
-
-```
-Browser
-   │
-   ▼
-Express (server.js)
-   │
-   ├── Static assets (public/)
-   ├── Session middleware (express-session)
-   ├── Body parsers (urlencoded + json)
-   ├── Anti-cache headers (/admin/*)
-   ├── CSRF token issuance
-   │
-   ├── requireAdmin ──► controllers/adminController.js   (dashboard, history, support)
-   ├── requireAdmin ──► controllers/faqController.js     (FAQ list + CRUD)
-   ├── requireAdmin ──► controllers/settingController.js (bot configuration)
-   └── requireAdmin ──► controllers/authController.js    (login, logout)
-                                │
-                                ▼
-                        MySQL connection pool
-                                │
-                                ▼
-                      db_chatbot (phpMyAdmin)
-```
-
-Request flow for a protected admin page:
-
-1. Static and body-parsing middleware run.
-2. No-store cache headers are set for `/admin`.
-3. A per-session CSRF token is issued into `res.locals`.
-4. `requireAdmin` checks for `req.session.adminId`; if absent, the request is redirected to `/admin/login`.
-5. The controller reads from MySQL and renders an EJS view.
-
-### Startup behaviour
-
-`server.js` performs a `SELECT 1` connectivity probe inside an async IIFE **before** binding the HTTP port. If the database is unreachable the process logs the driver error and exits with code `1` rather than starting a server that would return 500s on every page.
-
-`SIGINT` and `SIGTERM` are handled to drain in-flight requests and close the connection pool, so a restart or deploy does not truncate a half-written save.
+> Catatan: README versi lama menyebut `express-session`, `connect.sid`, dan chat "belum dibuat". Implementasi terkini memakai `cookie-session` dan chatbot sudah aktif penuh.
 
 ---
 
-## Project Structure
+## Struktur Folder (MVC)
 
 ```
 chatbot-smekda/
-├── controllers/
-│   ├── adminController.js      # dashboard, history, support
-│   ├── authController.js       # login, bcrypt verify, logout
-│   ├── faqController.js        # FAQ index + CRUD (owns `respon`)
-│   └── settingController.js    # app_settings read/update
-├── scripts/
-│   └── migrate-faq-schema.js   # idempotent FAQ schema migration
-├── public/
-│   └── images/smekda.png       # school logo
-├── views/
+├── server.js                      # Entry point: middleware, routes, guard, CSRF, rate limit
+├── config/
+│   └── db.js                      # MODEL: pool mysql2/promise + SSL TiDB (single source of truth)
+├── controllers/                   # CONTROLLER
+│   ├── authController.js          # Login, logout, dummy-hash timing defense
+│   ├── adminController.js         # Dashboard, history log, support
+│   ├── faqController.js           # CRUD respon + LEFT JOIN users (relasi created_by)
+│   ├── settingController.js       # app_settings (greeting & fallback)
+│   └── chatController.js          # Halaman chat, AI + fallback matcher, KI cache, logging
+├── views/                         # VIEW (EJS + Tailwind)
+│   ├── user/chat.ejs              # Antarmuka chat siswa
 │   ├── admin/
+│   │   ├── login.ejs
 │   │   ├── dashboard.ejs
 │   │   ├── faq.ejs
 │   │   ├── history.ejs
-│   │   ├── login.ejs
 │   │   ├── settings.ejs
 │   │   ├── support.ejs
-│   │   └── partial/
-│   │       └── faq-pagination.ejs
+│   │   └── partial/faq-pagination.ejs
 │   └── partials/
-│       ├── admin-header.ejs    # sidebar, logo, navigation
-│       └── admin-footer.ejs
-├── .env                        # credentials — never commit
-├── .gitignore
-├── package.json
-├── package-lock.json
-├── README.md
-├── seed.js                     # schema bootstrap + admin + settings
-└── server.js                   # application entry point
+│       ├── admin-header.ejs       # Sidebar + navigasi
+│       └── admin-footer.ejs       # Modal konfirmasi & swipe logout
+├── public/                        # Static: JS, CSS, images/smekda.png
+├── scripts/
+│   ├── seed-faq.js                # Seed 22 FAQ terverifikasi (profil, PPDB, jurusan, ekskul)
+│   ├── migrate-faq-schema.js      # Migrasi skema FAQ lama (idempotent)
+│   ├── migrate-chat-log-status.js # Migrasi kolom status history_chat
+│   └── ensure-chat-tables.js      # Penjamin tabel chat
+├── seed.js                        # Bootstrap skema + admin + settings + FAQ + history (FK created_by)
+├── db_chatbot.sql                 # EXPORT: CREATE TABLE + INSERT dummy + FK
+├── PRESENTATION_GUIDE.md          # Cheat sheet sidang UKK
+├── QA_TEST_CASE.md                # 15 test case QA
+├── vercel.json                    # Konfigurasi serverless
+├── .env                           # Kredensial (JANGAN di-commit)
+└── package.json
 ```
+
+**Alur MVC:** `Browser → Express routes (server.js) → middleware (session, CSRF, guard) → Controller → config/db.js (pool) → TiDB/MySQL → EJS View → Browser`.
 
 ---
 
-## Local Installation Guide
-
-### 1. Install dependencies
+## Instalasi Lokal
 
 ```bash
+# 1. Clone & masuk folder
 git clone <repository-url>
 cd chatbot-smekda
+
+# 2. Install dependency
 npm install
-```
 
-### 2. Initialise the database
+# 3. Salin/konfigurasi .env (lihat bagian Konfigurasi)
+#    Pastikan SESSION_SECRET minimal 32 karakter.
 
-Create an empty MySQL database named `db_chatbot`, then run the seed script. It creates the `users` table if missing, inserts the master admin account, and populates the global bot greeting and fallback settings.
-
-```bash
+# 4. Buat skema + data awal (idempotent, bisa dijalankan ulang)
 node seed.js
-```
 
-The script is safe to re-run — it skips records that already exist rather than duplicating them.
+# Alternatif: import export SQL mentah (MySQL CLI)
+mysql -u root -p < db_chatbot.sql
 
-> **Schema note.** If you are upgrading from the original schema, run the FAQ migration once before seeding:
-> ```bash
-> node scripts/migrate-faq-schema.js
-> ```
-> This adds `menu`, `label` and `kata_pemicu` to `respon`, makes the legacy `kode` column nullable, and removes three invalid foreign keys that referenced empty parent tables. The migration is idempotent.
-
-### 3. Boot the application
-
-```bash
+# 5. Jalankan server
 node server.js
+# IRIS-2 server listening on http://localhost:3000
 ```
 
-The console will confirm database connectivity before the server binds:
+Buka:
 
-```
-[db] connected to db_chatbot
-IRIS-2 server listening on http://localhost:3000
-```
+- Chat siswa: **http://localhost:3000/chat**
+- Login admin: **http://localhost:3000/admin/login**
 
-Open **http://localhost:3000/admin/login** and sign in with the seeded administrator credentials.
+Jika skema lama masih aktif, jalankan `node scripts/migrate-faq-schema.js` terlebih dahulu (idempotent). `node seed.js` juga otomatis menambahkan kolom `created_by` beserta foreign key-nya ke tabel `respon` yang sudah ada.
+
+---
+
+## Konfigurasi `.env`
+
+| Variabel | Wajib | Fungsi | Contoh |
+|---|---|---|---|
+| `DB_HOST` | Ya | Host TiDB/MySQL | `gateway01.ap-northeast-1.prod.aws.tidbcloud.com` |
+| `DB_PORT` | Ya | Port database | `4000` |
+| `DB_DATABASE` | Ya | Nama skema (default `db_chatbot`) | `db_chatbot` |
+| `DB_USERNAME` | Ya | User database | `2G7pYBQQKdxNeLY.root` |
+| `DB_PASSWORD` | Ya | Password database | `********` |
+| `DB_SSL_CA` | Tidak | Path CA private/self-signed | `./certs/tidb-ca.pem` |
+| `DB_POOL_LIMIT` | Tidak | Batas koneksi pool (default 5) | `5` |
+| `DB_CONNECT_TIMEOUT` | Tidak | Timeout handshake TLS (default 20000 ms) | `20000` |
+| `SESSION_SECRET` | Ya | Kunci penandatanganan cookie, **minimal 32 karakter** | string acak panjang |
+| `GEMINI_API_KEY` | Ya untuk AI | Kunci Google AI Studio | `AQ...` |
+| `GEMINI_MODEL` | Tidak | Override model (default `gemini-3.5-flash-lite`) | `gemini-3.5-flash-lite` |
+| `PORT` | Tidak | Port HTTP lokal (default 3000) | `3000` |
+| `NODE_ENV` | Tidak | `production` mengaktifkan cookie `secure` | `production` |
+
+> **Tips:** password yang mengandung `#` atau spasi harus dibungkus tanda kutip ganda, jika tidak akan terpotong sebagai komentar. Jangan pernah commit `.env` — sudah masuk `.gitignore`.
 
 ---
 
 ## Database Schema
 
-### `respon` — FAQ entries
+**Relasi:** `respon.created_by → users.id` dengan `ON DELETE SET NULL`. Artinya setiap FAQ mencatat admin pembuatnya; jika akun admin dihapus, FAQ **tetap ada** dan kolom `created_by`-nya menjadi `NULL`. Ini diverifikasi dengan query JOIN aktif di `faqController.index`:
 
-| Column | Type | Notes |
+```sql
+SELECT r.id, r.menu, r.label, r.kata_pemicu, r.isi, u.name AS authorName
+FROM respon r
+LEFT JOIN users u ON r.created_by = u.id
+WHERE r.menu LIKE ?
+ORDER BY r.menu ASC, r.label ASC, r.id ASC
+LIMIT ? OFFSET ?
+```
+
+### Ringkasan tabel
+
+| Tabel | Kolom kunci | Fungsi |
 |---|---|---|
-| `id` | int, PK, auto_increment | Surrogate key |
-| `kode` | varchar(150), nullable | Legacy field, mirrors `label` for older consumers |
-| `isi` | text, NOT NULL | The chatbot reply |
-| `menu` | varchar(150), NOT NULL | Category section, e.g. PPDB, Profil |
-| `label` | varchar(150), NOT NULL | Short descriptor shown in the table |
-| `kata_pemicu` | varchar(255), NOT NULL | Trigger keywords matched against student input |
+| `users` | `id` (PK), `email` (UNIQUE), `password` | Akun administrator |
+| `respon` | `id` (PK), `created_by` (FK → users.id) | FAQ + kata pemicu + jawaban |
+| `app_settings` | `key` (PK) | `greeting_message`, `fallback_message` |
+| `history_chat` | `id` (PK), `token`, `status` | Log semua percakapan (Answered / Unanswered) |
 
-Indexed on `menu` and on `(menu, label)`.
-
-> **Historical schema defect.** `respon.id` was originally a foreign key to `kuota.id`, `navigation.id` **and** `keywords.id` simultaneously. With those parent tables empty, every `INSERT` failed with `ER_NO_REFERENCED_ROW_2`, which made FAQ creation impossible. The migration drops these constraints so the table is writable.
-
-### `app_settings` — bot configuration
-
-| Column | Type | Notes |
-|---|---|---|
-| `key` | varchar(50), PK | e.g. `greeting_message` |
-| `value` | text, NOT NULL | Stored setting value |
-| `created_at` / `updated_at` | timestamp | Managed by the application |
-
-Writes use an upsert (`ON DUPLICATE KEY UPDATE`) and are restricted to a whitelist of `greeting_message` and `fallback_message`, so a crafted request cannot write to other keys.
-
-### `users` — administrators
-
-Standard columns including a unique `email` and a bcrypt `password` hash.
-
-### `history_chat` — conversation logs
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | int, PK | |
-| `token` | varchar(100) | Session token for the conversation |
-| `pesan_masuk` | text | Inbound student message |
-| `pesan_keluar` | text | Bot reply; empty indicates an unanswered question |
-
-> The dashboard's "Unanswered Questions" counter reads rows where `pesan_keluar` is `NULL` or empty. Nothing currently writes to this table; the logging logic belongs to the unimplemented chat engine.
+Export SQL lengkap tersedia di `db_chatbot.sql` (CREATE TABLE + PRIMARY KEY + FOREIGN KEY + INSERT dummy untuk keempat tabel).
 
 ---
 
-## Security Measures
+## Daftar Akun Uji Coba
 
-- **Password hashing** — bcrypt with a per-user salt. Plaintext passwords are never stored or logged.
-- **Session gatekeeping** — `requireAdmin` guards every admin route and redirects unauthenticated requests to the login page.
-- **CSRF protection** — a 32-byte random token is issued per session and exposed to views. Every state-changing admin POST is verified using `crypto.timingSafeEqual` for constant-time comparison. An invalid or missing token returns `403`.
-- **Session teardown** — logout destroys the session server-side and clears the `connect.sid` cookie with matching attributes.
-- **Anti-caching** — `no-store, no-cache, must-revalidate, private` on all `/admin` responses, preventing the browser Back button from replaying an authenticated page after logout.
-- **Parameterised SQL** — every query uses `mysql2` placeholders. No user input is concatenated into SQL.
-- **Output escaping** — EJS `<%= %>` escapes interpolated values. Inline `onclick` handlers receive controller-pre-escaped strings so quotes and newlines cannot break out of the attribute.
-- **Whitelisted settings writes** — only known keys may be updated in `app_settings`.
-- **Fail-fast startup** — the server refuses to boot without a working database connection.
-- **Graceful shutdown** — in-flight requests finish and the pool closes cleanly on `SIGINT` / `SIGTERM`.
-- **Credential isolation** — `.env` is git-ignored and must never be committed.
-
-### Known hardening gaps
-
-These remain open and should be addressed before exposing the service to the public internet:
-
-- `express-session` uses the default in-memory store, which leaks memory and loses all sessions on restart. Use a persistent store such as `connect-mysql2`.
-- `GET /admin/logout` performs a state change without CSRF verification, permitting a forced-logout via a crafted link. Prefer POST-only logout.
-- There is no rate limiting on the login endpoint, leaving password guessing unthrottled.
-- `SESSION_SECRET` must be a long random value unique to each deployment.
-- Serve over HTTPS so the `secure` session cookie flag takes effect (`NODE_ENV=production`).
-
----
-
-## Configuration
-
-All runtime settings are read from `.env` via dotenv.
-
-| Variable | Purpose | Example |
-|---|---|---|
-| `DB_HOST` | MySQL host | `127.0.0.1` |
-| `DB_PORT` | MySQL port | `3306` |
-| `DB_DATABASE` | Database name | `db_chatbot` |
-| `DB_USERNAME` | MySQL user | `root` |
-| `DB_PASSWORD` | MySQL password | *(quote values containing `#` or spaces)* |
-| `SESSION_SECRET` | Session signing secret | long random string |
-| `PORT` | HTTP port | `3000` |
-| `NODE_ENV` | `production` enables secure cookies | `production` |
-
-> **Quoting matters.** An unquoted `DB_PASSWORD` containing `#` is truncated at that character when parsed as a comment. Always wrap such values in double quotes.
-
-> **Legacy keys.** The current `.env` still carries unused Laravel-era variables (`APP_KEY`, `BROADCAST_DRIVER`, `MAIL_*`, `PUSHER_*`, `VITE_*` and others). They are harmless but can be removed; only the keys in the table above are read by the application.
-
----
-
-## API Reference
-
-All routes are prefixed with `/admin`. Protected routes require an active session and, for writes, a valid CSRF token.
-
-| Method | Path | Auth | CSRF | Purpose |
+| No | Nama | Email | Password | Role |
 |---|---|---|---|---|
-| GET | `/admin/login` | — | — | Login form |
-| POST | `/admin/login` | — | — | Authenticate |
-| GET | `/admin/logout` | — | — | Logout (legacy) |
-| POST | `/admin/logout` | ✓ | ✓ | Logout |
-| GET | `/admin/dashboard` | ✓ | — | Dashboard metrics |
-| GET | `/admin/faq` | ✓ | — | FAQ list (`q`, `category`, `page`, `per_page`) |
-| POST | `/admin/faq/store` | ✓ | ✓ | Create FAQ |
-| POST | `/admin/faq/:id` | ✓ | ✓ | Update FAQ |
-| POST | `/admin/faq/:id/delete` | ✓ | ✓ | Delete FAQ |
-| GET | `/admin/history` | ✓ | — | Conversation logs |
-| GET | `/admin/settings` | ✓ | — | Bot configuration form |
-| POST | `/admin/settings/update` | ✓ | ✓ | Save configuration |
-| GET | `/admin/support` | ✓ | — | Help and support |
-| GET | `/admin/logs` | ✓ | — | Alias of history |
+| 1 | Super Admin IRIS-2 | `admin@smkn2purwakarta.sch.id` | `Admin123!` | Administrator (akses penuh) |
+| 2 | Butsaina Dzurwa | `butsaina@smkn2purwakarta.sch.id` | `Admin123!` | Operator konten |
+| 3 | Admin Humas SMKN 2 | `humas@smkn2purwakarta.sch.id` | `Admin123!` | Staf Humas |
 
-### FAQ write contract
-
-The Add/Edit form posts exactly four fields, and `faqController.validate()` reads exactly these names:
-
-| Form input | Column | Required |
-|---|---|---|
-| `menu` | `respon.menu` | Yes |
-| `label` | `respon.label` | Yes |
-| `keywords` | `respon.kata_pemicu` | Yes |
-| `response` | `respon.isi` | Yes |
-
-> **Field names must stay in sync.** A mismatch between the form's `name` attribute and the controller does not raise an error — validation fails, a flash message appears and the page redirects without writing. This exact mismatch previously hid a bug where the form sent `response_text` while the controller read `response`, so every create silently failed. `store()` now logs the received payload on validation failure to make this class of bug obvious. If FAQ creation stops working, check the server log for `[faq] store rejected`.
+> Akun dibuat oleh `node seed.js` dan juga tersedia di `db_chatbot.sql`. Password disimpan sebagai bcrypt hash (cost 10), bukan plaintext.
 
 ---
 
-## Troubleshooting
+## Fitur Utama
 
-**Server exits immediately with `[db] connection check failed`**
-The database is unreachable. Verify `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD` and `DB_DATABASE` in `.env`, and that the MySQL service is running.
+- **Chatbot IRIS-2** — jawaban dari Gemini 3.5 Flash Lite yang di-grounding pada seluruh baris FAQ melalui `systemInstruction` (5 aturan permanen: bahasa, sapaan, profanity, pengetahuan sekolah, out-of-scope).
+- **Fallback lokal** — normalisasi slang (`sp`, `kepsek`, `kpsk`, `smekda`, `jur`, `jrsn`, `syrt`, `dimn`) + jarak Levenshtein ≤ 2, sehingga bot tetap menjawab saat API mati.
+- **Cache pengetahuan 60 detik** — mengurangi round-trip TiDB per request.
+- **Log percakapan async** — setiap pertanyaan tercatat di `history_chat` dengan token sesi.
+- **CRUD FAQ** — create/read/update/delete dengan pencarian, filter kategori, dan pagination.
+- **Dashboard** — total chat, total keyword, jumlah pertanyaan belum terjawab, aktivitas terakhir.
+- **Log History** — audit trail lengkap dengan pencarian dan pagination.
+- **Settings** — mengubah greeting & fallback message (whitelist key).
+- **Rate limiting** — maksimal 30 pertanyaan per menit per IP.
 
-**Login succeeds but every page redirects back to login**
-The session cookie is not persisting. Confirm `SESSION_SECRET` is set and stable across restarts, and that you are accessing the site consistently over the same protocol and host.
+---
 
-**"Email atau Password yang Anda masukkan salah!"**
-Credentials did not match. Re-run `node seed.js` to confirm the admin account exists, or insert a bcrypt hash manually.
+## Dokumentasi API
 
-**"Token keamanan tidak valid" (403)**
-The CSRF token was stale, usually because the page sat open past a session rotation. Reload the page and retry.
+| Method | Path | Handler | Proteksi |
+|---|---|---|---|
+| GET | `/` | redirect → `/chat` | — |
+| GET | `/chat` | `chatController.page` | publik |
+| POST | `/api/chatbot/query` | `chatController.query` | rate limiter |
+| GET | `/admin/login` | `authController.showLogin` | redirect jika sudah login |
+| POST | `/admin/login` | `authController.login` | CSRF |
+| GET / POST | `/admin/logout` | `authController.logout` | POST: CSRF |
+| GET | `/admin/dashboard` | `adminController.dashboard` | session admin |
+| GET | `/admin/faq` | `faqController.index` (LEFT JOIN) | session admin |
+| POST | `/admin/faq/store` | `faqController.store` | session + CSRF |
+| POST | `/admin/faq/:id` | `faqController.update` | session + CSRF |
+| POST | `/admin/faq/:id/delete` | `faqController.destroy` | session + CSRF |
+| GET | `/admin/history` | `adminController.history` | session admin |
+| GET | `/admin/settings` | `settingController.index` | session admin |
+| POST | `/admin/settings/update` | `settingController.update` | session + CSRF |
+| GET | `/admin/support` | `adminController.support` | session admin |
+| GET | `/admin/logs` | alias history | session admin |
 
-**FAQ creation shows an alert but nothing is saved**
-Check the server log for `[faq] store rejected`. It prints the exact payload received, revealing a field-name mismatch between the form and the controller.
+---
 
-**A migration or seed script fails on a connection error**
-`mysql2` returns a promise from `createConnection`; it must be awaited before use. Also ensure the database exists before running `seed.js`.
+## Keamanan
+
+- **Password:** bcryptjs + salt per user; dummy hash cost-12 mencegah user enumeration lewat timing.
+- **Session:** cookie `smekda_session` signed dengan `SESSION_SECRET`, `httpOnly`, `sameSite: lax`, `secure` di production.
+- **CSRF:** token 32-byte per session, diverifikasi dengan `crypto.timingSafeEqual` pada semua POST admin.
+- **SQL Injection:** semua input memakai prepared statement `?`; nama kolom dari whitelist.
+- **XSS:** EJS `<%= %>` melakukan escape; data untuk `onclick` di-escape dulu oleh `jsAttr()`; balasan chat memakai `textContent`, bukan `innerHTML`.
+- **Anti-cache:** header `no-store` pada seluruh `/admin` mencegah dashboard muncul lagi lewat tombol Back setelah logout.
+- **Relasi aman:** `ON DELETE SET NULL` menjaga FAQ tetap ada saat admin dihapus.
+- **Graceful shutdown:** `SIGINT`/`SIGTERM` menutup pool setelah request selesai.
 
 ---
 
 ## Developer Credit
 
-Developed by: Butsaina (butsaina2134@gmail.com)
+Dikembangkan oleh **Butsaina Dzurwa M.** — siswa kelas 12 RPL SMKN 2 Purwakarta.
+Kontak: butsaina2134@gmail.com · Instagram: [@bbutsaina](https://instagram.com/bbutsaina)
+
+---
+
+## System Design Diagrams (ERD, Use Case & Flowchart)
+
+### 1. Entity Relationship Diagram (ERD)
+
+Diagram ini mengikuti definisi kolom persis di `db_chatbot.sql`. Tipe data ditulis dalam bentuk dasar Mermaid; keterangan di dalam tanda kutip memuat informasi MySQL lengkap (mis. `UNSIGNED`, panjang `VARCHAR`, nilai `ENUM`).
+
+```mermaid
+erDiagram
+    users {
+        int id PK "INT UNSIGNED AUTO_INCREMENT"
+        varchar name "VARCHAR(255) NOT NULL"
+        varchar email "VARCHAR(191) NOT NULL UNIQUE"
+        timestamp email_verified_at "TIMESTAMP NULL"
+        varchar password "VARCHAR(255) NOT NULL (bcrypt cost 10)"
+        varchar remember_token "VARCHAR(100) NULL"
+        timestamp created_at "TIMESTAMP NULL"
+        timestamp updated_at "TIMESTAMP NULL"
+    }
+
+    respon {
+        int id PK "INT UNSIGNED AUTO_INCREMENT"
+        varchar kode "VARCHAR(150) NULL (= label)"
+        text isi "TEXT NOT NULL"
+        varchar menu "VARCHAR(150) NOT NULL DEFAULT ''"
+        varchar label "VARCHAR(150) NOT NULL DEFAULT ''"
+        varchar kata_pemicu "VARCHAR(255) NOT NULL DEFAULT ''"
+        int created_by FK "INT UNSIGNED NULL"
+    }
+
+    history_chat {
+        int id PK "INT UNSIGNED AUTO_INCREMENT"
+        varchar token "VARCHAR(100) NOT NULL"
+        text pesan_masuk "TEXT NOT NULL"
+        text pesan_keluar "TEXT NOT NULL"
+        enum status "ENUM('Answered','Unanswered') NOT NULL"
+        timestamp created_at "TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"
+    }
+
+    app_settings {
+        varchar key PK "VARCHAR(191) NOT NULL"
+        text value "TEXT NULL"
+        timestamp created_at "TIMESTAMP NULL"
+        timestamp updated_at "TIMESTAMP NULL"
+    }
+
+    users ||--o{ respon : "created_by -> users.id (ON DELETE SET NULL)"
+```
+
+> Catatan: sesuai `db_chatbot.sql`, primary key `app_settings` adalah kolom **`key`** (`VARCHAR(191)`), bukan `id`. Relasi satu-satunya antar tabel adalah `respon.created_by → users.id` dengan `ON DELETE SET NULL`.
+
+### 2. Use Case Diagram (Flowchart representation)
+
+```mermaid
+flowchart LR
+    PUB["Publik / Siswa"]
+    ADM["Admin / Staf Humas"]
+
+    UC1(["Chat IRIS-2"])
+    UC2(["Popular Questions"])
+    UC3(["Multilingual / Typo Query"])
+
+    AC1(["Login"])
+    AC2(["Dashboard Stats"])
+    AC3(["CRUD FAQ"])
+    AC4(["View History Chat"])
+    AC5(["Update Bot Settings"])
+    AC6(["Logout"])
+
+    PUB --> UC1
+    PUB --> UC2
+    PUB --> UC3
+
+    ADM --> AC1
+    ADM --> AC2
+    ADM --> AC3
+    ADM --> AC4
+    ADM --> AC5
+    ADM --> AC6
+
+    AC1 -.->|session + CSRF| AC2
+    AC2 --> AC3
+    AC2 --> AC4
+    AC2 --> AC5
+    AC5 -.->|greeting & fallback| UC1
+    AC6 -.->|clear cookie| AC1
+```
+
+### 3. System Flowchart — End-to-End Chat Request
+
+```mermaid
+flowchart TD
+    A["GET /chat render UI<br/>POST /api/chatbot/query"] --> B{"Valid?<br/>teks 1-500 char<br/>dan ≤30 req/menit/IP?"}
+    B -->|Tidak| B1["HTTP 400 / 429<br/>reply error + Retry-After"]
+    B -->|Ya| C{"Cache RAM 60 detik<br/>masih valid?"}
+
+    C -->|Ya| D["Gunakan KB_CACHE<br/>(FAQ + fallback)"]
+    C -->|Tidak| E["TiDB / MySQL<br/>SELECT respon + app_settings"]
+    E --> F["Isi KB_CACHE<br/>TTL 60 detik"]
+
+    D --> G["Gemini AI<br/>gemini-3.5-flash-lite<br/>systemInstruction = 5 aturan + semua FAQ"]
+    F --> G
+
+    G --> H{"AI reply diterima?"}
+    H -->|Ya| I{"Ada prefiks<br/>[UNANSWERED]?"}
+    I -->|Ya| J["Hapus prefiks<br/>matched=false, status=Unanswered"]
+    I -->|Tidak| K["reply AI<br/>matched=true, status=Answered"]
+
+    H -->|Tidak / API mati| L["Local Matcher offline<br/>normalisasi slang + Levenshtein ≤2"]
+    L --> M{"Skor ≥ 5?"}
+    M -->|Ya| N["reply = isi FAQ<br/>matched=true"]
+    M -->|Tidak| O["reply = fallback_message<br/>matched=false"]
+
+    J --> P["res.json<br/>{ reply, matched, status }"]
+    K --> P
+    N --> P
+    O --> P
+
+    P -.->|async, tidak mem-blok respons| Q["INSERT history_chat<br/>(token, pesan, reply, status)"]
+    Q --> R["Dashboard Stats & Log History<br/>Admin / Staf Humas"]
+```

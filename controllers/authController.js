@@ -2,34 +2,50 @@ const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 
 const GENERIC_ERROR = 'Email atau Password yang Anda masukkan salah!';
+const EMPTY_ERROR = 'Email dan Password wajib diisi!';
 
-// Valid cost-12 bcrypt hash of an unguessable random string. Never matches any
-// real password; exists purely to equalise response timing.
+// hash dummy jaga timing
 const DUMMY_HASH = '$2b$12$m.kjDFLYqfrT/AoV2IB5T.c2BBUdIc02odnpXV.Mm/t6nMny14pTm';
 
+// tampilkan halaman login admin
 exports.showLogin = (req, res) => {
+  const error = (req.session && req.session.loginError) ? req.session.loginError : null;
+  const email = (req.session && req.session.loginEmail) ? req.session.loginEmail : '';
+  if (req.session) {
+    delete req.session.loginError;
+    delete req.session.loginEmail;
+  }
   res.render('admin/login', {
-    error: req.session.loginError || null,
-    email: req.session.loginEmail || '',
+    error: error || null,
+    email: email || '',
+    csrfToken: (req.session && req.session.csrfToken) || res.locals.csrfToken || '',
   });
-  delete req.session.loginError;
-  delete req.session.loginEmail;
 };
 
+// validasi input & cek password login
 exports.login = (req, res) => {
-  // Body values may be absent (unsupported/unparsed content type) or non-string
-  // (a crafted JSON body sending an array or object). Coerce defensively so the
-  // handler never throws a TypeError and never feeds a non-string into bcrypt.
   const body = req.body || {};
   const email = (typeof body.email === 'string' ? body.email : '').trim();
   const password = typeof body.password === 'string' ? body.password : '';
+  const csrfToken = (req.session && req.session.csrfToken) || res.locals.csrfToken || '';
 
-  // A standard email is bounded at 254 characters. Reject anything longer before
-  // it reaches the driver instead of handing an unbounded string to the query.
-  if (!email || !password || email.length > 254) {
-    req.session.loginError = GENERIC_ERROR;
-    req.session.loginEmail = email;
-    return res.redirect(303, '/admin/login');
+  if (!email || !password) {
+    const errorMsg = !email && !password
+      ? EMPTY_ERROR
+      : (!email ? 'Email wajib diisi!' : 'Password wajib diisi!');
+    return res.status(400).render('admin/login', {
+      error: errorMsg,
+      email,
+      csrfToken,
+    });
+  }
+
+  if (email.length > 254) {
+    return res.status(400).render('admin/login', {
+      error: 'Format email tidak valid atau terlalu panjang!',
+      email,
+      csrfToken,
+    });
   }
 
   pool
@@ -39,53 +55,36 @@ exports.login = (req, res) => {
     )
     .then(([rows]) => {
       const user = rows[0];
-
-      // Compare against a real dummy hash when the email is unknown so that a
-      // missing account and a wrong password take comparable time, which stops
-      // attackers enumerating valid admin emails. This must be a well-formed
-      // 60-character bcrypt hash: bcryptjs short-circuits on a malformed hash
-      // and returns instantly, reintroducing the timing leak.
       const hash = user ? user.password : DUMMY_HASH;
       const ok = bcrypt.compareSync(password, hash);
 
       if (!user || !ok) {
-        req.session.loginError = GENERIC_ERROR;
-        req.session.loginEmail = email;
-        return res.redirect(303, '/admin/login');
+        return res.status(400).render('admin/login', {
+          error: GENERIC_ERROR,
+          email,
+          csrfToken,
+        });
       }
 
-      // Discard any pre-existing session before storing the admin identity.
-      // cookie-session has no regenerate(), so clear the object instead. This
-      // is the session-fixation defence: a cookie planted before login cannot
-      // survive into the authenticated session.
-      const previous = { ...req.session };
-      req.session = null;
-      req.session = {};
-
-      // Carry over only the fields the login view renders. Anything else from
-      // the old session (notably an old CSRF token) is intentionally dropped.
-      if (previous.loginError) req.session.loginError = previous.loginError;
-      if (previous.loginEmail) req.session.loginEmail = previous.loginEmail;
-
+      req.session.admin = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      };
       req.session.adminId = user.id;
       req.session.adminName = user.name;
       req.session.adminEmail = user.email;
 
-      // 303 forces the browser/webview to follow up with a GET. A bare 302 after
-      // a POST is ambiguous and some proxies/webviews replay the POST against
-      // /admin/dashboard (which has no POST route), producing a bounce loop.
-      return res.redirect(303, '/admin/dashboard');
+      const proceed = () => res.redirect('/admin/dashboard');
+      if (typeof req.session.save === 'function') {
+        req.session.save(proceed);
+      } else {
+        proceed();
+      }
     })
     .catch((err) => {
-      // Log the code alongside the message: a dropped serverless socket
-      // (ETIMEDOUT / ECONNRESET / PROTOCOL_CONNECTION_LOST) looks identical to a
-      // genuine bad password in the browser, so without this the only evidence
-      // is a generic "wrong password" bounce with no server-side cause.
       console.error(`[auth] login failed [${err.code || 'NOCODE'}]:`, err.message);
 
-      // Distinguish "we could not check your credentials" from "your
-      // credentials are wrong". Telling the admin the database is unreachable
-      // stops them repeatedly retrying a password that may be perfectly valid.
       const infraCodes = new Set([
         'ETIMEDOUT',
         'ECONNREFUSED',
@@ -99,27 +98,22 @@ exports.login = (req, res) => {
       ]);
       const infraFailure = err.fatal === true || infraCodes.has(err.code);
 
-      req.session.loginError = infraFailure
+      const errorMsg = infraFailure
         ? 'Koneksi ke database sedang tidak stabil. Mohon tunggu sebentar lalu coba lagi.'
         : 'Terjadi kesalahan pada server. Silakan coba lagi.';
-      req.session.loginEmail = email;
 
-      // 503 marks a retryable dependency failure, so the admin sees a clear
-      // "try again" rather than a wrong-password message. The redirect still
-      // carries the explanation through the session.
-      res.setHeader('Retry-After', '10');
-      return res.redirect(303, '/admin/login');
+      return res.status(500).render('admin/login', {
+        error: errorMsg,
+        email,
+        csrfToken,
+      });
     });
 };
 
+// hapus session saat logout
 exports.logout = (req, res) => {
-  // cookie-session clears state by nulling the session, which makes the
-  // middleware emit an expired cookie on the way out.
   req.session = null;
 
-  // Clear the cookie explicitly too. The name and attributes must match those
-  // used in server.js, otherwise the browser keeps the old cookie and the
-  // admin still appears to be signed in.
   res.clearCookie('smekda_session', {
     httpOnly: true,
     sameSite: 'lax',

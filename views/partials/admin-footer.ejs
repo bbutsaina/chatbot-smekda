@@ -1,8 +1,8 @@
     </main>
   </div>
 
-  <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center hidden" id="modal-logout">
-    <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full mx-4 shadow-2xl border border-[#DEE2E6] text-center">
+  <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center transition-all duration-200 ease-in-out opacity-0 pointer-events-none" id="modal-logout">
+    <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full mx-4 shadow-2xl border border-[#DEE2E6] text-center transition-all duration-200 ease-in-out scale-95">
       <div class="w-14 h-14 bg-[#F8F9FA] rounded-2xl border border-[#DEE2E6] text-[#212529] mx-auto flex items-center justify-center mb-4">
         <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
@@ -20,11 +20,20 @@
   <script data-purpose="modals-and-actions">
     function openLogoutModal() {
       const modal = document.getElementById('modal-logout');
-      if (modal) modal.classList.remove('hidden');
+      if (!modal) return;
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+      modal.classList.add('opacity-100');
+      const panel = modal.querySelector('div');
+      if (panel) { panel.classList.remove('scale-95'); panel.classList.add('scale-100'); }
     }
     function closeLogoutModal() {
       const modal = document.getElementById('modal-logout');
-      if (modal) modal.classList.add('hidden');
+      if (!modal) return;
+      modal.classList.remove('opacity-100');
+      modal.classList.add('opacity-0');
+      const panel = modal.querySelector('div');
+      if (panel) { panel.classList.remove('scale-100'); panel.classList.add('scale-95'); }
+      setTimeout(() => modal.classList.add('pointer-events-none'), 200);
     }
 
     const track = document.getElementById('swipe-track');

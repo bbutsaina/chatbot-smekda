@@ -2,12 +2,11 @@
 <meta charset="utf-8">
 <meta content="width=device-width, initial-scale=1.0" name="viewport">
 <title>IRIS-2 - SMEKDA Assistant</title>
-<!-- Tailwind CSS CDN with forms plugin -->
+<!-- tampilan chat & kirim pesan -->
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<!-- BEGIN: Custom Styles -->
 <head>
 <style data-purpose="custom-scrollbars">
-    /* Custom thin scrollbar for chat viewport */
+    /* scroll chat tipis */
     #chat-messages::-webkit-scrollbar {
       width: 5px;
     }
@@ -34,16 +33,50 @@
     .typing-dot:nth-child(2) { animation-delay: -0.16s; }
     .typing-dot:nth-child(3) { animation-delay: 0s; }
   </style>
-<!-- END: Custom Styles -->
+<style data-purpose="chat-bg">
+    /* latar dot-grid */
+    .chat-bg {
+      background-color: #F4F5F7;
+      background-image:
+        radial-gradient(ellipse 55% 65% at 72% 48%, rgba(33,37,41,0.055) 0%, transparent 68%),
+        radial-gradient(circle, #DEE2E6 1px, transparent 1px);
+      background-size: 100% 100%, 24px 24px;
+    }
+    /* lingkaran status */
+    @keyframes pulseRing {
+      0%   { transform: scale(1);   opacity: 0.7; }
+      70%  { transform: scale(2.2); opacity: 0;   }
+      100% { transform: scale(2.2); opacity: 0;   }
+    }
+    .status-pulse::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      background: #34d399;
+      animation: pulseRing 2s cubic-bezier(0.4,0,0.6,1) infinite;
+    }
+    /* hover balasan cepat */
+    .quick-btn {
+      transition: background-color 150ms ease, border-color 150ms ease,
+                  box-shadow 150ms ease, transform 100ms ease;
+    }
+    .quick-btn:hover {
+      background-color: #DEE2E6;
+      border-color: #ADB5BD;
+      box-shadow: 0 2px 6px -1px rgba(33,37,41,0.09);
+      transform: translateY(-1px);
+    }
+    .quick-btn:active {
+      transform: scale(0.985);
+      box-shadow: none;
+    }
+  </style>
 </head>
-<body class="bg-[#FAFAFA] text-[#212529] min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-10 font-sans antialiased selection:bg-slate-200">
-<!-- BEGIN: MainContainer -->
+<body class="chat-bg text-[#212529] min-h-screen flex items-center justify-center p-4 sm:p-6 md:p-10 font-sans antialiased selection:bg-slate-200">
 <main class="w-full max-w-6xl mx-auto flex flex-col lg:flex-row items-center lg:items-start justify-center gap-8 lg:gap-14 py-4">
-<!-- BEGIN: LeftColumnInfo -->
 <section class="w-full lg:w-5/12 flex flex-col justify-center space-y-7 pt-4 lg:pt-10">
-<!-- School Branding Header -->
 <div class="flex items-center gap-3.5">
-<!-- School Crest: official logo image -->
 <div class="w-12 h-12 flex-shrink-0 rounded-xl flex items-center justify-center bg-white shadow-sm border border-slate-200 p-1">
 <img src="/images/smekda.png" alt="Logo SMK Negeri 2 Purwakarta" class="w-10 h-10 object-contain" />
 </div>
@@ -52,7 +85,6 @@
 <h3 class="text-xl font-bold tracking-tight text-slate-900 leading-tight">Purwakarta</h3>
 </div>
 </div>
-<!-- Main Catchphrase & Description -->
 <div class="space-y-3">
 <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight text-[#1e2329]">
           Hi, aku IRIS-2
@@ -61,21 +93,15 @@
           IRIS-2 merupakan singkatan dari <span class="font-semibold text-slate-800">Interactive Response &amp; Information System</span> untuk SMKN 2 Purwakarta.
         </p>
 </div>
-<!-- Developer Info Card -->
-<div class="border border-slate-200/90 bg-white shadow-sm rounded-2xl p-6 sm:p-7 relative transition-all">
+<div class="border border-slate-200/90 bg-white/80 backdrop-blur-sm shadow-sm rounded-2xl p-6 sm:p-7 relative transition-all hover:shadow-md hover:border-slate-300/80">
 <p class="text-[13.5px] leading-relaxed text-slate-600 font-normal">
           IRIS-2 dikembangkan oleh <span class="font-semibold text-slate-800">Butsaina Dzurwa M.</span>, seorang full-stack developer siswa kelas 12 Rekayasa Perangkat Lunak (RPL) dengan tujuan untuk memodernisasi kualitas pelayanan informasi digital di SMKN 2 Purwakarta. Hubungi instagram <a class="font-medium text-slate-900 hover:text-blue-600 underline decoration-slate-300 hover:decoration-blue-500 transition-colors" href="https://instagram.com/bbutsaina" rel="noopener" target="_blank">@bbutsaina</a> jika menemukan bug sistem atau informasi data yang kurang akurat, terima kasih.
         </p>
 </div>
 </section>
-<!-- END: LeftColumnInfo -->
-<!-- BEGIN: RightColumnChatWidget -->
 <section class="w-full lg:w-6/12 max-w-[480px]">
-<!-- Chat Widget Wrapper -->
-<div class="w-full bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-200 flex flex-col overflow-hidden h-[640px]">
-<!-- BEGIN: ChatHeader -->
+<div class="w-full bg-white rounded-3xl shadow-[0_12px_48px_-8px_rgba(33,37,41,0.14),0_2px_8px_-2px_rgba(33,37,41,0.08)] border border-slate-200/80 flex flex-col overflow-hidden h-[640px]">
 <header class="bg-[#343A40] px-5 py-4 flex items-center gap-3.5 flex-shrink-0 text-white shadow-sm">
-<!-- Bot Avatar Emblem: brand mark doubles as the admin login gateway -->
 <a href="/admin/login" aria-label="Admin login" title="Admin login" class="block flex-shrink-0 rounded-xl transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-white/40">
 <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
 <svg class="w-5 h-5 text-white fill-current" viewBox="0 0 24 24" aria-hidden="true">
@@ -83,17 +109,18 @@
 </svg>
 </div>
 </a>
-<!-- Header Labels & Status Indicator -->
 <div class="flex-1 min-w-0">
 <div class="flex items-center gap-2">
 <h4 class="font-bold text-sm tracking-wide text-white truncate">IRIS - SMEKDA Assistant</h4>
 </div>
 <div class="flex items-center gap-1.5 mt-0.5">
-<span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+<span class="relative inline-flex w-2 h-2">
+  <span class="status-pulse absolute inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+  <span class="relative inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+</span>
 <span class="text-xs text-slate-300 font-normal">Here to Help You!</span>
 </div>
 </div>
-<!-- Refresh / reset conversation -->
 <button type="button" aria-label="Refresh conversation" title="Refresh conversation"
   onclick="window.location.reload()"
   class="p-2 text-white/80 hover:text-white bg-transparent outline-none focus:outline-none focus:ring-0 transition-colors border-none flex-shrink-0">
@@ -103,58 +130,46 @@
   </svg>
 </button>
 </header>
-<!-- END: ChatHeader -->
-<!-- BEGIN: ChatFeedArea -->
 <div class="flex-1 bg-[#F8F9FA] p-5 overflow-y-auto space-y-4" id="chat-messages">
-<!-- Initial Greeting Bot Bubble -->
 <div class="flex flex-col items-start space-y-1.5 max-w-[85%]">
 <div class="bg-[#E9ECEF] text-[#212529] px-4 py-3 rounded-2xl rounded-tl-sm text-sm border border-slate-200/70 shadow-sm leading-relaxed">
               <%= greeting %>
             </div>
 <span class="text-[11px] text-[#6C757D] font-medium pl-1" data-purpose="greeting-time"></span>
 </div>
-<!-- Quick Access FAQ Pills Container -->
 <div class="pt-2" id="faq-section">
 <p class="text-xs font-semibold text-[#6C757D] mb-2.5 pl-0.5">Frequently Asked</p>
 <div class="flex flex-col space-y-2">
-<button class="w-full text-left bg-[#E9ECEF] hover:bg-[#DEE2E6] text-slate-800 text-xs sm:text-[13px] font-medium px-4 py-3 rounded-xl border border-slate-300/40 hover:border-slate-300 transition duration-150 active:scale-[0.99] flex items-center justify-between group" onclick="handleQuickSelect('Apa Web official SMK Negeri 2 Purwakarta?')">
+<button class="quick-btn w-full text-left bg-[#E9ECEF] text-slate-800 text-xs sm:text-[13px] font-medium px-4 py-3 rounded-xl border border-slate-300/40 flex items-center justify-between group" onclick="handleQuickSelect('Apa Web official SMK Negeri 2 Purwakarta?')">
 <span class="">Apa Web official SMK Negeri 2 Purwakarta?</span>
 <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
 </button>
-<button class="w-full text-left bg-[#E9ECEF] hover:bg-[#DEE2E6] text-slate-800 text-xs sm:text-[13px] font-medium px-4 py-3 rounded-xl border border-slate-300/40 hover:border-slate-300 transition duration-150 active:scale-[0.99] flex items-center justify-between group" onclick="handleQuickSelect('Bagaimana cara daftar?')">
+<button class="quick-btn w-full text-left bg-[#E9ECEF] text-slate-800 text-xs sm:text-[13px] font-medium px-4 py-3 rounded-xl border border-slate-300/40 flex items-center justify-between group" onclick="handleQuickSelect('Bagaimana cara daftar?')">
 <span class="">Bagaimana cara daftar?</span>
 <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
 </button>
-<button class="w-full text-left bg-[#E9ECEF] hover:bg-[#DEE2E6] text-slate-800 text-xs sm:text-[13px] font-medium px-4 py-3 rounded-xl border border-slate-300/40 hover:border-slate-300 transition duration-150 active:scale-[0.99] flex items-center justify-between group" onclick="handleQuickSelect('Berapa kuota jurusan RPL?')">
+<button class="quick-btn w-full text-left bg-[#E9ECEF] text-slate-800 text-xs sm:text-[13px] font-medium px-4 py-3 rounded-xl border border-slate-300/40 flex items-center justify-between group" onclick="handleQuickSelect('Berapa kuota jurusan RPL?')">
 <span class="">Berapa kuota jurusan RPL?</span>
 <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
 </button>
-<button class="w-full text-left bg-[#E9ECEF] hover:bg-[#DEE2E6] text-slate-800 text-xs sm:text-[13px] font-medium px-4 py-3 rounded-xl border border-slate-300/40 hover:border-slate-300 transition duration-150 active:scale-[0.99] flex items-center justify-between group" onclick="handleQuickSelect('Dimana alamat SMEKDA?')">
+<button class="quick-btn w-full text-left bg-[#E9ECEF] text-slate-800 text-xs sm:text-[13px] font-medium px-4 py-3 rounded-xl border border-slate-300/40 flex items-center justify-between group" onclick="handleQuickSelect('Dimana alamat SMEKDA?')">
 <span class="">Dimana alamat SMEKDA?</span>
 <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
 </button>
 </div>
 </div>
 </div>
-<!-- END: ChatFeedArea -->
-<!-- BEGIN: ChatInputForm -->
-<footer class="p-3.5 bg-[#F8F9FA] border-t border-slate-200">
+<footer class="p-3.5 bg-white border-t border-slate-200/80">
 <form class="flex items-center gap-2" id="chat-form">
-<!-- Text Input Field -->
-<input autocomplete="off" class="flex-1 bg-white border border-slate-300 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 text-slate-800 text-sm rounded-full px-4 py-2.5 outline-none placeholder:text-slate-400 transition" id="user-input" name="query" placeholder="Message" type="text">
-<!-- Submit Button -->
-<button aria-label="Send message" class="w-10 h-10 rounded-full bg-[#343A40] hover:bg-[#212529] text-white flex items-center justify-center transition active:scale-95 flex-shrink-0 shadow-sm disabled:opacity-50" id="send-btn" type="submit">
+<input autocomplete="off" class="flex-1 bg-[#F8F9FA] border border-slate-200 focus:border-[#343A40] focus:ring-1 focus:ring-[#343A40]/20 text-slate-800 text-sm rounded-full px-4 py-2.5 outline-none placeholder:text-slate-400 transition-all duration-150" id="user-input" name="query" placeholder="Message" type="text">
+<button aria-label="Send message" class="w-10 h-10 rounded-full bg-[#343A40] hover:bg-[#212529] text-white flex items-center justify-center transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm hover:shadow-md disabled:opacity-50" id="send-btn" type="submit">
 <svg class="w-4 h-4 transform rotate-45 -mr-0.5 -mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
 </button>
 </form>
 </footer>
-<!-- END: ChatInputForm -->
 </div>
 </section>
-<!-- END: RightColumnChatWidget -->
 </main>
-<!-- END: MainContainer -->
-<!-- BEGIN: ChatLogicScript -->
 <script data-purpose="chat-interactive-handlers">
     const chatMessages = document.getElementById('chat-messages');
     const chatForm = document.getElementById('chat-form');
@@ -171,13 +186,7 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    /**
-     * Build a chat bubble with DOM nodes.
-     *
-     * Message text is assigned via textContent rather than interpolated into an
-     * innerHTML template. Interpolating would let a student inject markup into
-     * their own transcript and execute script in the page.
-     */
+    // bikin bubble chat
     function addMessage(sender, text) {
       const isUser = sender === 'user';
       const timeStr = getCurrentTime();
@@ -230,17 +239,14 @@
       userInput.disabled = on;
     }
 
-    /**
-     * Send the student message to the Node controller, which matches it against
-     * FAQ keywords in MySQL, logs the exchange, and returns the reply.
-     */
+    // kirim pesan ke server
     async function processUserMessage(message) {
       const cleanMessage = message.trim();
       if (!cleanMessage) return;
 
       addMessage('user', cleanMessage);
 
-      // Hide the FAQ pills after the first interaction to keep the timeline clean.
+      // sembunyikan pilihan faq
       if (faqSection) faqSection.style.display = 'none';
 
       showTypingIndicator();
@@ -277,11 +283,10 @@
       }
     });
 
-    // Stamp the server-rendered greeting bubble with the current time.
+    // cap waktu sapaan
     const greetingTime = document.querySelector('[data-purpose="greeting-time"]');
     if (greetingTime) greetingTime.textContent = getCurrentTime();
   </script>
-<!-- END: ChatLogicScript -->
 
 
 </body></html>

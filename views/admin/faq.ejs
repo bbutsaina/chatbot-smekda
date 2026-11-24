@@ -18,15 +18,14 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-2.5">
-        <!-- Add New Data Button -->
+        <!-- tabel & modal crud faq -->
         <button class="px-4 py-2 bg-[#212529] hover:bg-[#343A40] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition shadow-sm active:scale-95" onclick="openAddFaqModal()" type="button">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
           </svg>
-          + Add New Data
+          Add New Data
         </button>
 
-        <!-- Live keyword search -->
         <form action="/admin/faq" method="GET" class="relative">
           <% if (perPage !== 9) { %><input type="hidden" name="per_page" value="<%= perPage %>" /><% } %>
           <% if (category) { %><input type="hidden" name="category" value="<%= category %>" /><% } %>
@@ -38,17 +37,21 @@
           <input class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-[#DEE2E6] rounded-xl text-[#212529] font-semibold focus:ring-1 focus:ring-[#212529] focus:outline-none transition" name="q" value="<%= search %>" placeholder="Cari FAQ..." type="search"/>
         </form>
 
-        <!-- Category filter -->
         <form action="/admin/faq" method="GET" class="relative">
           <% if (perPage !== 9) { %><input type="hidden" name="per_page" value="<%= perPage %>" /><% } %>
           <% if (search) { %><input type="hidden" name="q" value="<%= search %>" /><% } %>
           <label class="sr-only" for="faq-category-select">Category</label>
-          <select class="px-3.5 py-2 bg-white border border-[#DEE2E6] rounded-xl text-xs font-semibold text-[#212529] hover:bg-[#F8F9FA] focus:ring-0 focus:outline-none cursor-pointer" id="faq-category-select" name="category" onchange="this.form.submit()">
+          <select class="appearance-none pr-10 px-3.5 py-2 bg-white border border-[#DEE2E6] rounded-xl text-xs font-semibold text-[#212529] hover:bg-[#F8F9FA] focus:ring-0 focus:outline-none cursor-pointer" id="faq-category-select" name="category" onchange="this.form.submit()">
             <option value="">Category: All</option>
             <% categories.forEach(function (cat) { %>
               <option value="<%= cat %>" <%= category === cat ? 'selected' : '' %>><%= cat %></option>
             <% }); %>
           </select>
+          <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#6C757D]">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+          </span>
         </form>
       </div>
     </div>
@@ -121,7 +124,6 @@
   </div>
 </section>
 
-<!-- BEGIN: Add FAQ Data Modal -->
 <div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300 opacity-0 pointer-events-none" id="modal-add-faq">
   <div class="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full mx-auto shadow-2xl border border-[#DEE2E6] transform transition-all duration-300 scale-95" id="modal-add-faq-panel">
     <div class="flex items-center justify-between pb-4 mb-4 border-b border-[#DEE2E6]">
@@ -179,7 +181,6 @@
     </form>
   </div>
 </div>
-<!-- END: Add FAQ Data Modal -->
 
 <%- include('../partials/admin-footer') %>
 
